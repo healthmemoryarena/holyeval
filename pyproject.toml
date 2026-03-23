@@ -1,7 +1,7 @@
 [project]
 name = "holyeval"
 version = "0.1.0"
-description = "Theta Health 虚拟用户评测框架"
+description = "Open-source LLM evaluation framework — reproduce any benchmark with one command"
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [

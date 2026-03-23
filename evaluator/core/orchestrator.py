@@ -370,6 +370,13 @@ async def do_single_test(
         logger.info("[%s] %s", case_id, _SEPARATOR_LIGHT)
         logger.info("[%s] 对话完成，共 %d 轮", case_id, turn)
 
+        # 对话结束后写一次完整的 live 数据（此时 target_response 已全部回填）
+        if context and context.on_turn:
+            try:
+                context.on_turn(context)
+            except Exception:
+                logger.warning("[%s] on_turn 回调异常（对话结束）", case_id, exc_info=True)
+
         # ---- 3. 清理资源 ----
         if hasattr(target_agent, "cleanup"):
             await target_agent.cleanup()

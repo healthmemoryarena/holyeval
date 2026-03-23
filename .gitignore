@@ -88,12 +88,15 @@ generator/thetagendata/
 generator/aq_redteam/
 CLAUDE.opensource.md
 README.opensource.md
-USAGE.md
+.env.opensource.example
 .pikiclaw/skills/publish-opensource/
+.pikiclaw/skills/push/
 .claude/settings.json
 .claude/settings.local.json
 .gitlab-ci.yml
 .idea/
+.next/
+.dockerignore
 .env
 __pycache__/
 .pytest_cache/

@@ -527,22 +527,24 @@ class TaskManager:
         if not entry:
             raise KeyError(f"任务不存在: {task_id}")
 
-        # eval-only 任务无 BatchSession
+        # session 已释放（completed/error/cancelled 或 eval-only）
         if entry.session is None:
+            # 从报告文件重建 cases 摘要（session 释放后内存无 cases）
+            cases, max_concurrency, runtime_target = _load_report_cases(entry.report_path)
             snap: dict[str, Any] = {
                 "id": entry.task_id,
                 "status": entry.status,
                 "benchmark": entry.benchmark,
                 "dataset": entry.dataset,
-                "runtime_target": None,
+                "runtime_target": runtime_target,
                 "created_at": entry.created_at.isoformat(),
                 "report_path": entry.report_path,
-                "total": entry.total,
-                "completed": entry.completed,
+                "total": entry.total or len(cases),
+                "completed": entry.completed or len(cases),
                 "cancelled": False,
-                "cases": {},
+                "cases": cases,
                 "error": entry.error,
-                "max_concurrency": None,
+                "max_concurrency": max_concurrency,
             }
             # 按 tag 分组统计（eval-only 任务从 eval_results 计算）
             if entry.eval_results:
@@ -646,6 +648,40 @@ def _compute_test_result_tag_stats(results: list[TestResult]) -> dict[str, dict]
     return stats
 
 
+def _load_report_cases(report_path: str | None) -> tuple[dict[str, dict], int | None, dict | None]:
+    """从报告文件重建 cases 摘要字典，供 session 释放后的 snapshot 使用。
+
+    返回: (cases_dict, max_concurrency, runtime_target)
+    """
+    if not report_path:
+        return {}, None, None
+    try:
+        with open(report_path, "r", encoding="utf-8") as f:
+            report_data = json.load(f)
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return {}, None, None
+
+    cases: dict[str, dict] = {}
+    for c in report_data.get("cases", []):
+        cid = c.get("id", "")
+        ev = c.get("eval") or {}
+        cases[cid] = {
+            "status": "completed",
+            "title": c.get("title", ""),
+            "user_type": c.get("user_type", ""),
+            "target_type": c.get("target_type", ""),
+            "eval_type": c.get("eval_type", ""),
+            "score": ev.get("score"),
+            "eval_result": ev.get("result"),
+            "cost": c.get("cost"),
+            "tags": c.get("tags", []),
+            "turn": 0,
+        }
+    max_concurrency = report_data.get("max_concurrency")
+    runtime_target = report_data.get("runtime_target")
+    return cases, max_concurrency, runtime_target
+
+
 def _load_report_summary(report_path: str | None) -> tuple[dict[str, dict], dict[str, Any] | None]:
     """从报告文件读取 stats_by_tag / report_summary，作为内存态缺失时的兜底"""
     if not report_path:
@@ -690,6 +726,11 @@ def _write_live_file(task_id: str, ctx: CaseContext) -> None:
     test_memory = [m.model_dump(mode="json") for m in ctx.test_agent.memory_list] if ctx.test_agent else []
     target_memory = [m.model_dump(mode="json") for m in ctx.target_agent.memory_list] if ctx.target_agent else []
 
+    # 预加载的历史对话（HealthBench 多轮等场景），与报告格式对齐
+    history = []
+    if ctx.test_agent and ctx.test_agent.history:
+        history = [{"type": m.type, "content": m.content} for m in ctx.test_agent.history]
+
     data = {
         "id": ctx.case_id,
         "eval": {
@@ -697,6 +738,7 @@ def _write_live_file(task_id: str, ctx: CaseContext) -> None:
             "score": None,
             "feedback": None,
             "trace": {
+                "history": history,
                 "test_memory": test_memory,
                 "target_memory": target_memory,
             },
