@@ -104,8 +104,6 @@ def _parse_target_specs(raw: Any) -> list[TargetSpec]:
     - list[dict] → 逐个解析（新格式，多 target）
     - dict → 单对象解析，返回单元素列表（兼容旧格式）
     - None → 返回空列表
-
-    自动过滤掉未注册的 target type（插件不存在时静默跳过）。
     """
     if raw is None:
         return []
@@ -115,26 +113,11 @@ def _parse_target_specs(raw: Any) -> list[TargetSpec]:
             spec = _parse_single_target_spec(item)
             if spec:
                 specs.append(spec)
-        return _filter_registered_specs(specs)
+        return specs
     if isinstance(raw, dict):
         spec = _parse_single_target_spec(raw)
-        return _filter_registered_specs([spec]) if spec else []
+        return [spec] if spec else []
     return []
-
-
-def _filter_registered_specs(specs: list[TargetSpec]) -> list[TargetSpec]:
-    """过滤掉未注册的 target type（插件不存在时静默跳过）"""
-    try:
-        from evaluator.core.interfaces.abstract_target_agent import AbstractTargetAgent
-
-        registered = set(AbstractTargetAgent._registry.keys())
-        filtered = [s for s in specs if s.type in registered]
-        skipped = [s.type for s in specs if s.type not in registered]
-        if skipped:
-            logger.debug("跳过未注册的 target type: %s", ", ".join(skipped))
-        return filtered
-    except Exception:
-        return specs
 
 
 def _extract_title(obj: dict[str, Any]) -> str:

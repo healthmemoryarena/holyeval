@@ -51,7 +51,6 @@ data_local
 !.pikiclaw/skills/
 !.pikiclaw/skills/**
 
-
 # === OPENSOURCE-EXCLUDE START ===
 # Auto-generated from .opensource-exclude — do not edit manually
 hma-web/
