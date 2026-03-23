@@ -51,11 +51,8 @@ data_local
 !.pikiclaw/skills/
 !.pikiclaw/skills/**
 
-# ============================================================
-# Internal files excluded from opensource (auto-generated)
-# These are tracked in main but not in opensource.
-# This section prevents them from appearing as untracked.
-# ============================================================
+# === OPENSOURCE-EXCLUDE START ===
+# Auto-generated from .opensource-exclude — do not edit manually
 hma-web/
 scripts/
 tools/
@@ -90,6 +87,14 @@ generator/thetagen/
 generator/thetagendata/
 generator/aq_redteam/
 .gitlab-ci.yml
-.claude/
-.agents/
+.idea/
 .pikiclaw/
+.agents/
+.claude/
+.env
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+.DS_Store
+# === OPENSOURCE-EXCLUDE END ===
