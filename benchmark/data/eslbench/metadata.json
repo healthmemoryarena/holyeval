@@ -1,6 +1,6 @@
 {
-  "description": "# ESLBench\n\nEHR Synthetic Longitudinal Benchmark — 基于 99 个合成用户（user301-399）的健康数据 QA 评测。\n\n| 数据集 | 条数 | 说明 |\n|--------|------|------|\n| `full` | 9900 | 全量（99用户 × 100题） |\n| `full_sample` | 50 | 分层采样（按难度比例） |",
-  "prepare": "generator.thetagen.prepare_data",
+  "description": "# ESLBench\n\nEHR Synthetic Longitudinal Benchmark — 50 synthetic patient health QA cases for evaluating AI health assistants on longitudinal electronic health record data.\n\n| Dataset | Cases |\n|---------|-------|\n| `eslbench` | 50 |",
+  "max_concurrency": 5,
   "target": [
     {
       "type": "theta_api",
