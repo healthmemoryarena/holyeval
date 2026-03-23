@@ -1,0 +1,10 @@
+{
+  "description": "# AgentClinic\n\n[AgentClinic](https://github.com/SamuelSchmidgall/AgentClinic) 多专科临床诊断评测数据集（JMIR 2025）。\n\n将复杂临床病例（OSCE 格式）转换为单轮诊断任务，评估大模型在真实临床场景下的诊断准确率。\n\n## 子集\n\n| 子集 | 数量 | 说明 |\n|------|------|------|\n| medqa | 107 | USMLE 风格医学考题，多专科嵌套 OSCE 结构 |\n| nejm | 14 | NEJM 临床影像诊断多选题 |\n\n**评估器**: `preset_answer`（关键词匹配诊断）\n\n**来源**: SamuelSchmidgall/AgentClinic (MIT License)",
+  "target": {
+    "type": "llm_api",
+    "fields": {
+      "model": {"default": "gpt-4.1", "editable": true, "required": true},
+      "system_prompt": {"default": null, "editable": true}
+    }
+  }
+}

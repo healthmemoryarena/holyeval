@@ -1,0 +1,203 @@
+{# 共享费用计算工具 — tasks/detail.html 和 reports/detail.html 共用 #}
+<script>
+/* Token 定价（USD / 1M tokens）— 2026-02 更新
+   cached_input: 缓存命中的 input tokens 价格
+   来源: openai.com/api/pricing, ai.google.dev/gemini-api/docs/pricing,
+         anthropic.com/claude/sonnet, openrouter.ai */
+const _tokenPricing = {
+    // OpenAI — Flagship
+    'gpt-5.4':                  { input: 2.50, cached_input: 0.25, output: 15.00 },
+    'gpt-5.2':                  { input: 1.75, cached_input: 0.175, output: 14.00 },
+    'gpt-5-mini':               { input: 0.25, cached_input: 0.025, output: 2.00 },
+    // OpenAI — GPT-4.1 系列
+    'gpt-4.1':                  { input: 3.00, cached_input: 0.75, output: 12.00 },
+    'gpt-4.1-mini':             { input: 0.80, cached_input: 0.20, output: 3.20 },
+    'gpt-4.1-nano':             { input: 0.20, cached_input: 0.05, output: 0.80 },
+    // Google Gemini 3.1
+    'gemini-3.1-pro-preview':   { input: 2.00, cached_input: 0.20, output: 12.00 },
+    'gemini-3.1-flash-lite-preview':    { input: 0.25, cached_input: 0.025, output: 1.50 },
+    // Google Gemini 3
+    'gemini-3-pro-preview':     { input: 2.00, cached_input: 0.20, output: 12.00 },
+    'gemini-3-flash-preview':   { input: 0.50, cached_input: 0.05, output: 3.00 },
+    // Anthropic (via OpenRouter)
+    'anthropic/claude-opus-4.6':   { input: 5.00, cached_input: 0.50, output: 25.00 },
+    'anthropic/claude-sonnet-4.6': { input: 3.00, cached_input: 0.30, output: 15.00 },
+    // Zhipu (via OpenRouter)
+    'z-ai/glm-5':              { input: 0.80, cached_input: 0.40, output: 2.56 },
+};
+const _defaultPricing = { input: 2.00, cached_input: 0.50, output: 8.00 };
+
+function _calcUsageCost(usageDict) {
+    /* 从 {model: {input_tokens, output_tokens, input_token_details?}} 计算美元费用
+       input_token_details.cache_read 按折扣价计费，其余按全价 */
+    let cost = 0;
+    if (!usageDict) return cost;
+    for (const [model, usage] of Object.entries(usageDict)) {
+        const p = _tokenPricing[model] || _defaultPricing;
+        const totalInput = usage.input_tokens || 0;
+        const cachedInput = usage.input_token_details?.cache_read || 0;
+        const freshInput = totalInput - cachedInput;
+        cost += freshInput * p.input / 1e6;
+        cost += cachedInput * (p.cached_input ?? p.input) / 1e6;
+        cost += (usage.output_tokens || 0) * p.output / 1e6;
+    }
+    return cost;
+}
+
+/** 提取 target 费用 — 优先使用 API 返回的 total_cost，无则回退到 token 估算 */
+function _targetCostFromDetail(cost) {
+    if (cost?.target_detail?.total_cost != null) return cost.target_detail.total_cost;
+    return _calcUsageCost(cost?.target);
+}
+
+function _formatCost(usd) {
+    if (usd === 0) return '—';
+    if (usd < 0.001) return '<$0.001';
+    if (usd < 0.01) return '$' + usd.toFixed(4);
+    if (usd < 1) return '$' + usd.toFixed(3);
+    if (usd < 100) return '$' + usd.toFixed(2);
+    return '$' + Math.round(usd);
+}
+
+function _sumTokens(usageDict, field) {
+    if (!usageDict) return 0;
+    return Object.values(usageDict).reduce((s, u) => s + (u[field] || 0), 0);
+}
+
+/** 从 cost 列表聚合统计 */
+function _aggregateCosts(costList) {
+    let costTest = 0, costTarget = 0, costEval = 0, totalTokens = 0;
+    for (const cost of costList) {
+        if (!cost) continue;
+        costTest += _calcUsageCost(cost.test);
+        costTarget += _targetCostFromDetail(cost);
+        costEval += _calcUsageCost(cost.eval);
+        // target tokens: 有 breakdown 时汇总子代理 tokens
+        let targetTokens = 0;
+        const bd = cost.target_detail?.breakdown;
+        if (bd?.length) {
+            for (const item of bd) targetTokens += (item.input_tokens || 0) + (item.output_tokens || 0);
+        } else {
+            targetTokens = _sumTokens(cost.target, 'total_tokens');
+        }
+        totalTokens += _sumTokens(cost.test, 'total_tokens')
+                     + targetTokens
+                     + _sumTokens(cost.eval, 'total_tokens');
+    }
+    const totalCost = costTest + costTarget + costEval;
+    return {
+        totalCostLabel: _formatCost(totalCost),
+        totalTokens,
+        costByRole: {
+            test: _formatCost(costTest),
+            target: _formatCost(costTarget),
+            eval: _formatCost(costEval),
+            testVal: costTest,
+            targetVal: costTarget,
+            evalVal: costEval,
+        },
+    };
+}
+
+/** 单条 case 的费用行（用于费用明细表） */
+function _caseCostRows(c) {
+    const rows = [];
+    const roleNames = { test: 'Test', target: 'Target', eval: 'Eval' };
+    const td = c.cost?.target_detail;
+
+    // Target 行: 优先用 breakdown，其次用 total_cost，最后回退到 token 估算
+    if (td?.breakdown?.length) {
+        const multi = td.breakdown.length > 1;
+        for (const item of td.breakdown) {
+            let role = 'Target';
+            if (multi && item.source && item.source !== 'main') {
+                const label = item.source.startsWith('sub:') ? item.source.slice(4) : item.source;
+                role = '↳ ' + label;
+            }
+            rows.push({
+                role, model: item.model || td.model || 'unknown',
+                input: item.input_tokens || 0,
+                output: item.output_tokens || 0,
+                costLabel: item.total_cost != null ? _formatCost(item.total_cost) : '—',
+            });
+        }
+    } else if (td?.total_cost != null) {
+        // 有 total_cost 无 breakdown — 用 API 成本
+        const usage = c.cost?.target;
+        if (usage) {
+            for (const [model, u] of Object.entries(usage)) {
+                rows.push({
+                    role: 'Target', model,
+                    input: u.input_tokens || 0,
+                    output: u.output_tokens || 0,
+                    costLabel: _formatCost(td.total_cost),
+                });
+            }
+        }
+    } else {
+        // 无 target_detail — 回退到 token 估算
+        const usage = c.cost?.target;
+        if (usage) {
+            for (const [model, u] of Object.entries(usage)) {
+                rows.push({
+                    role: 'Target', model,
+                    input: u.input_tokens || 0,
+                    output: u.output_tokens || 0,
+                    costLabel: _formatCost(_calcUsageCost({ [model]: u })),
+                });
+            }
+        }
+    }
+
+    // Eval + Test: 保持 token 估算
+    for (const role of ['eval', 'test']) {
+        const usage = c.cost?.[role];
+        if (!usage) continue;
+        for (const [model, u] of Object.entries(usage)) {
+            rows.push({
+                role: roleNames[role], model,
+                input: u.input_tokens || 0,
+                output: u.output_tokens || 0,
+                costLabel: _formatCost(_calcUsageCost({ [model]: u })),
+            });
+        }
+    }
+    return rows;
+}
+
+/** 单条 case 的总费用 */
+function _caseCost(c) {
+    if (!c?.cost) return 0;
+    return _calcUsageCost(c.cost.test) + _targetCostFromDetail(c.cost) + _calcUsageCost(c.cost.eval);
+}
+
+/** 单条 case 的某类 token 合计 */
+function _caseCostTotalTokens(c, field) {
+    if (!c?.cost) return 0;
+    const key = field + '_tokens';
+    let targetTokens = 0;
+    const bd = c.cost?.target_detail?.breakdown;
+    if (bd?.length) {
+        for (const item of bd) targetTokens += item[key] || 0;
+    } else {
+        targetTokens = _sumTokens(c.cost.target, key);
+    }
+    return _sumTokens(c.cost.test, key) + targetTokens + _sumTokens(c.cost.eval, key);
+}
+
+/* ---- Agent 配置展示工具 ---- */
+
+/** 从配置 dict 提取可展示的 [key, value] 列表 */
+function _configEntries(cfg) {
+    if (!cfg) return [];
+    return Object.entries(cfg).filter(([k, v]) => v != null);
+}
+
+/** 格式化配置值用于展示 */
+function _formatCfgVal(v) {
+    if (Array.isArray(v)) return v.length + ' 条';
+    if (typeof v === 'object' && v !== null) return JSON.stringify(v);
+    const s = String(v);
+    return s.length > 80 ? s.slice(0, 80) + '…' : s;
+}
+</script>

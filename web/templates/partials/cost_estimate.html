@@ -1,0 +1,148 @@
+{# 共享费用预估工具 — benchmarks/index.html, benchmarks/detail.html, tasks/index.html 共用 #}
+{# 两因子模型: 总预估 = target token 费用 + eval 评估开销 #}
+{# #}
+{# 费用数据来源: #}
+{#   - eval agent 的 est_cost_per_case: 来自 plugin _cost_meta（API 动态加载） #}
+{#   - target agent 的 est_input/output_tokens: 来自 plugin _cost_meta（API 动态加载） #}
+{#   - token 定价: 外部数据（模型厂商定价），保留在此处 #}
+<script>
+/* ===== Token 定价（USD / 1M tokens）— 外部数据，各模型厂商公开定价 ===== */
+const _estTokenPricing = {
+    'gpt-5.4':                  { input: 2.50, output: 15.00 },
+    'gpt-5.2':                  { input: 1.75, output: 14.00 },
+    'gpt-4.1':                  { input: 2.00, output: 8.00 },
+    'gpt-4.1-mini':             { input: 0.40, output: 1.60 },
+    'gpt-4.1-nano':             { input: 0.10, output: 0.40 },
+    'gemini-3.1-pro-preview':   { input: 2.00, output: 12.00 },
+    'gemini-3.1-flash-lite-preview':    { input: 0.25, output: 1.50 },
+    'gemini-3-pro-preview':     { input: 2.00, output: 12.00 },
+    'gemini-3-flash-preview':   { input: 0.50, output: 3.00 },
+    'anthropic/claude-opus-4.6':   { input: 5.00, output: 25.00 },
+    'anthropic/claude-sonnet-4.6': { input: 3.00, output: 15.00 },
+    'minimax/minimax-m2.5':     { input: 0.30, output: 1.20 },
+    'z-ai/glm-5':              { input: 0.80, output: 2.56 },
+};
+const _estDefaultPricing = { input: 2.00, output: 8.00 };
+
+/* ===== 模型展示元数据（下拉框 TAG 用）===== */
+/* price: 输入价格简写（$/1M tokens），date: 发布月份 */
+const _modelMeta = {
+    'gpt-5.4':                  { price: '2.50', date: '2026-02' },
+    'gpt-5.2':                  { price: '1.75', date: '2025-12' },
+    'gpt-4.1':                  { price: '2.00', date: '2025-04' },
+    'gemini-3.1-pro-preview':   { price: '2.00', date: '2026-02' },
+    'gemini-3.1-flash-lite-preview':    { price: '0.25', date: '2026-02' },
+    'gemini-3-pro-preview':     { price: '2.00', date: '2025-09' },
+    'gemini-3-flash-preview':   { price: '0.50', date: '2025-09' },
+    'anthropic/claude-opus-4.6':   { price: '5.00', date: '2026-02' },
+    'anthropic/claude-sonnet-4.6': { price: '3.00', date: '2026-02' },
+    'minimax/minimax-m2.5':     { price: '0.30', date: '2025-10' },
+    'z-ai/glm-5':              { price: '0.80', date: '2025-08' },
+};
+
+/* ===== 从 plugin _cost_meta 动态构建的费用参数（由页面 JS 填充） ===== */
+/* { eval_agent_name: { est_cost_per_case } } */
+const _evalCostMeta = {};
+/* { target_agent_name: { est_input_tokens, est_output_tokens } } */
+const _targetCostMeta = {};
+
+const _estDefaultEvalCost = 0.010;     // 未声明 _cost_meta 的 eval agent 默认值
+const _estSecPerCase = 12;             // 单 case 平均耗时（秒）
+const _estDefaultConcurrency = 5;      // 默认并发数
+
+/**
+ * 从 API 返回的 agent 列表初始化费用元数据
+ * 页面 init 时调用，传入 /api/agents/eval 和 /api/agents/target 的响应
+ */
+function _initCostMeta(evalAgents, targetAgents) {
+    if (evalAgents) {
+        for (const a of evalAgents) {
+            if (a.cost_meta && Object.keys(a.cost_meta).length > 0) {
+                _evalCostMeta[a.name] = a.cost_meta;
+            }
+        }
+    }
+    if (targetAgents) {
+        for (const a of targetAgents) {
+            if (a.cost_meta && Object.keys(a.cost_meta).length > 0) {
+                _targetCostMeta[a.name] = a.cost_meta;
+            }
+        }
+    }
+}
+
+/**
+ * 预估 target 单次调用费用
+ * @param {string} targetType - target agent 类型名
+ * @param {string} model - 用户选择的模型名
+ * @returns {number} USD
+ */
+function _estTargetCallCost(targetType, model) {
+    if (!model) return 0;
+    const meta = _targetCostMeta[targetType];
+    if (!meta) return 0;
+    const inputTokens = meta.est_input_tokens || 0;
+    const outputTokens = meta.est_output_tokens || 0;
+    if (inputTokens === 0 && outputTokens === 0) return 0;
+    const pricing = _estTokenPricing[model] || _estDefaultPricing;
+    return (inputTokens * pricing.input + outputTokens * pricing.output) / 1e6;
+}
+
+/**
+ * 预估 eval 单 case 费用
+ * @param {string} evaluator - eval agent 类型名
+ * @returns {number} USD
+ */
+function _estEvalCaseCost(evaluator) {
+    if (!evaluator) return _estDefaultEvalCost;
+    const meta = _evalCostMeta[evaluator];
+    if (meta && meta.est_cost_per_case !== undefined) return meta.est_cost_per_case;
+    return _estDefaultEvalCost;
+}
+
+/**
+ * 预估单条 case 总费用
+ * @param {string} targetType - target agent 类型名
+ * @param {string} model - target 模型名
+ * @param {string} evaluator - eval agent 类型名
+ * @returns {number} USD
+ */
+function _estCostPerCase(targetType, model, evaluator) {
+    return _estTargetCallCost(targetType, model) + _estEvalCaseCost(evaluator);
+}
+
+/**
+ * 预估 N 条 case 的总费用
+ */
+function _estTotalCost(count, targetType, model, evaluator) {
+    return count * _estCostPerCase(targetType, model, evaluator);
+}
+
+/**
+ * 格式化预估费用为字符串
+ */
+function _estCostLabel(usd) {
+    if (usd === 0) return '—';
+    if (usd < 0.01) return '<$0.01';
+    if (usd < 1) return '~$' + usd.toFixed(2);
+    if (usd < 100) return '~$' + usd.toFixed(1);
+    return '~$' + Math.round(usd);
+}
+
+/**
+ * 预估耗时（秒）
+ */
+function _estTime(count, concurrency) {
+    return Math.ceil(count * _estSecPerCase / (concurrency || _estDefaultConcurrency));
+}
+
+/**
+ * 格式化预估耗时为字符串
+ */
+function _estTimeLabel(count, concurrency) {
+    const s = _estTime(count, concurrency);
+    if (s < 60) return '~' + s + ' 秒';
+    if (s < 3600) return '~' + Math.ceil(s / 60) + ' 分钟';
+    return '~' + (s / 3600).toFixed(1) + ' 小时';
+}
+</script>

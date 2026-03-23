@@ -1,0 +1,10 @@
+{
+  "description": "# HealthBench\n\nHealthBench 医疗 AI 评测数据集，基于 [OpenAI HealthBench](https://github.com/openai/simple-evals) 项目。\n\n使用多层级 rubric 评估，涵盖**准确性、完整性、安全性**等维度。\n\n## 子集\n\n| 子集 | 数量 | 说明 |\n|------|------|------|\n| sample | 100 | 按主题等比抽样 |\n| hard | 1,000 | 高难度子集 |\n| consensus | 3,671 | 医生共识子集 |\n| full | 5,000 | 全量数据 |\n\n**评估器**: `healthbench`（rubric-based grading）",
+  "target": [{
+    "type": "llm_api",
+    "fields": {
+      "model": {"default": "gpt-4.1", "editable": true, "required": true},
+      "system_prompt": {"default": null, "editable": true}
+    }
+  }]
+}

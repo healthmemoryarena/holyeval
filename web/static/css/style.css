@@ -1,0 +1,411 @@
+/* ============================================
+   HolyEval — shadcn/ui design tokens (CSS vars)
+   ============================================ */
+
+:root {
+    --background: #ffffff;
+    --foreground: #09090b;
+    --card: #ffffff;
+    --card-foreground: #09090b;
+    --popover: #ffffff;
+    --popover-foreground: #09090b;
+    --primary: #18181b;
+    --primary-foreground: #fafafa;
+    --secondary: #f4f4f5;
+    --secondary-foreground: #18181b;
+    --muted: #f4f4f5;
+    --muted-foreground: #71717a;
+    --accent: #f4f4f5;
+    --accent-foreground: #18181b;
+    --destructive: #ef4444;
+    --destructive-foreground: #fafafa;
+    --success: #22c55e;
+    --success-foreground: #ffffff;
+    --border: #e4e4e7;
+    --input: #e4e4e7;
+    --ring: #18181b;
+    --sidebar: #fafafa;
+    --sidebar-foreground: #09090b;
+    --sidebar-accent: #f4f4f5;
+    --sidebar-border: #e4e4e7;
+}
+
+.dark {
+    --background: #09090b;
+    --foreground: #fafafa;
+    --card: #0a0a0c;
+    --card-foreground: #fafafa;
+    --popover: #09090b;
+    --popover-foreground: #fafafa;
+    --primary: #fafafa;
+    --primary-foreground: #18181b;
+    --secondary: #27272a;
+    --secondary-foreground: #fafafa;
+    --muted: #27272a;
+    --muted-foreground: #a1a1aa;
+    --accent: #27272a;
+    --accent-foreground: #fafafa;
+    --destructive: #dc2626;
+    --destructive-foreground: #fafafa;
+    --success: #16a34a;
+    --success-foreground: #ffffff;
+    --border: #27272a;
+    --input: #27272a;
+    --ring: #d4d4d8;
+    --sidebar: #0a0a0c;
+    --sidebar-foreground: #fafafa;
+    --sidebar-accent: #27272a;
+    --sidebar-border: #27272a;
+}
+
+/* ============================================
+   Sidebar
+   ============================================ */
+
+.sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.4375rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--muted-foreground);
+    transition: background-color 0.15s, color 0.15s;
+    cursor: pointer;
+    text-decoration: none;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+}
+.sidebar-item:hover {
+    background-color: var(--sidebar-accent);
+    color: var(--sidebar-foreground);
+}
+.sidebar-item-active {
+    background-color: var(--sidebar-accent);
+    color: var(--sidebar-foreground);
+    font-weight: 500;
+}
+
+/* ============================================
+   shadcn Select (custom dropdown via Alpine.js)
+   ============================================ */
+
+.sh-select-trigger {
+    display: flex;
+    height: 2.25rem;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 0.375rem;
+    border: 1px solid var(--input);
+    background-color: transparent;
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    color: var(--foreground);
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sh-select-trigger:focus, .sh-select-trigger[data-state="open"] {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 20%, transparent);
+}
+.sh-select-trigger .placeholder { color: var(--muted-foreground); }
+
+.sh-select-content {
+    position: absolute;
+    z-index: 50;
+    margin-top: 0.25rem;
+    width: 100%;
+    border-radius: 0.375rem;
+    border: 1px solid var(--border);
+    background-color: var(--popover);
+    padding: 0.25rem;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+    max-height: 16rem;
+    overflow-y: auto;
+}
+.sh-select-item {
+    display: flex;
+    white-space: nowrap;
+    align-items: center;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    color: var(--popover-foreground);
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+.sh-select-item:hover {
+    background-color: var(--accent);
+}
+.sh-select-item.selected {
+    background-color: var(--accent);
+    font-weight: 500;
+}
+
+/* ============================================
+   shadcn Input
+   ============================================ */
+
+.sh-input {
+    display: flex;
+    height: 2.25rem;
+    width: 100%;
+    align-items: center;
+    border-radius: 0.375rem;
+    border: 1px solid var(--input);
+    background-color: transparent;
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    color: var(--foreground);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sh-input::placeholder { color: var(--muted-foreground); }
+.sh-input:focus {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 20%, transparent);
+}
+
+/* ============================================
+   shadcn Button
+   ============================================ */
+
+.sh-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    height: 2.25rem;
+    padding: 0 1rem;
+    cursor: pointer;
+    transition: background-color 0.15s, opacity 0.15s;
+    border: none;
+    outline: none;
+    text-decoration: none;
+}
+.sh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sh-btn-primary { background-color: var(--primary); color: var(--primary-foreground); }
+.sh-btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.sh-btn-secondary { background-color: var(--secondary); color: var(--secondary-foreground); border: 1px solid var(--border); }
+.sh-btn-secondary:hover:not(:disabled) { background-color: var(--accent); }
+.sh-btn-destructive { background-color: transparent; color: var(--destructive); border: 1px solid color-mix(in srgb, var(--destructive) 30%, transparent); }
+.sh-btn-destructive:hover:not(:disabled) { background-color: color-mix(in srgb, var(--destructive) 10%, transparent); }
+.sh-btn-ghost { background-color: transparent; color: var(--foreground); }
+.sh-btn-ghost:hover:not(:disabled) { background-color: var(--accent); }
+.sh-btn-sm { height: 2rem; padding: 0 0.75rem; font-size: 0.75rem; }
+
+/* ============================================
+   shadcn Checkbox
+   ============================================ */
+
+.sh-checkbox { cursor: pointer; }
+.sh-checkbox-box {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 0.25rem;
+    border: 1px solid var(--input);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.1s, border-color 0.1s;
+    color: var(--primary-foreground);
+}
+.sh-checkbox-box:hover { border-color: var(--ring); }
+.sh-checkbox input:checked + .sh-checkbox-box {
+    background-color: var(--primary);
+    border-color: var(--primary);
+}
+.sh-checkbox-box svg { display: none; }
+.sh-checkbox input:checked + .sh-checkbox-box svg { display: block; }
+
+/* ============================================
+   Badge
+   ============================================ */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1;
+    height: 1.25rem;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.badge-default { background-color: var(--primary); color: var(--primary-foreground); }
+.badge-secondary { background-color: var(--secondary); color: var(--secondary-foreground); }
+.badge-success { background-color: var(--success); color: var(--success-foreground); }
+.badge-destructive { background-color: var(--destructive); color: var(--destructive-foreground); }
+.badge-scored { background-color: #dbeafe; color: #1e40af; }
+:is(.dark) .badge-scored { background-color: rgba(59, 130, 246, 0.2); color: #93bbfd; }
+.badge-outline { background-color: transparent; border: 1px solid var(--border); color: var(--foreground); }
+
+/* Status badges */
+.status-pending   { background-color: var(--muted); color: var(--muted-foreground); }
+.status-init      { background-color: #dbeafe; color: #1e40af; }
+.status-dialogue  { background-color: #dbeafe; color: #1e40af; }
+.status-eval      { background-color: #fef9c3; color: #854d0e; }
+.status-completed { background-color: #dcfce7; color: #166534; }
+.status-error     { background-color: #fee2e2; color: #991b1b; }
+.status-cancelled { background-color: var(--muted); color: var(--muted-foreground); }
+.status-running   { background-color: #dbeafe; color: #1e40af; }
+.dark .status-init      { background-color: #1e3a5f; color: #93c5fd; }
+.dark .status-dialogue  { background-color: #1e3a5f; color: #93c5fd; }
+.dark .status-eval      { background-color: #422006; color: #fde68a; }
+.dark .status-completed { background-color: #14532d; color: #86efac; }
+.dark .status-error     { background-color: #450a0a; color: #fca5a5; }
+.dark .status-running   { background-color: #1e3a5f; color: #93c5fd; }
+
+/* ============================================
+   Card & Table
+   ============================================ */
+
+.card-hover { transition: box-shadow 0.15s, border-color 0.15s; }
+.card-hover:hover { box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-color: color-mix(in srgb, var(--border) 70%, var(--foreground)); }
+
+.table-row-hover { transition: background-color 0.1s; }
+.table-row-hover:hover { background-color: var(--muted); }
+
+/* ============================================
+   Agent Card (rich visual cards)
+   ============================================ */
+
+.agent-card {
+    position: relative;
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+    background-color: var(--card);
+    overflow: hidden;
+    transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+}
+.agent-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    border-color: color-mix(in srgb, var(--border) 60%, var(--foreground));
+    transform: translateY(-1px);
+}
+.dark .agent-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.agent-card-accent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+}
+
+.agent-icon-wrapper {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.625rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.2s;
+}
+.agent-card:hover .agent-icon-wrapper {
+    transform: scale(1.05);
+}
+
+.agent-feature-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    background-color: var(--secondary);
+    color: var(--secondary-foreground);
+    border: 1px solid var(--border);
+    transition: background-color 0.15s;
+}
+
+.agent-doc-section {
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    background-color: var(--muted);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--muted-foreground);
+    white-space: pre-line;
+}
+
+.agent-detail-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    background: transparent;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.agent-detail-toggle:hover {
+    background-color: var(--secondary);
+    color: var(--foreground);
+}
+.agent-detail-toggle.active {
+    background-color: var(--secondary);
+    color: var(--foreground);
+    border-color: color-mix(in srgb, var(--border) 60%, var(--foreground));
+}
+
+/* ============================================
+   Progress bar
+   ============================================ */
+
+.progress-bar { transition: width 0.3s ease-in-out; }
+
+/* ============================================
+   Code block
+   ============================================ */
+
+pre.code-block {
+    background-color: #18181b;
+    color: #e4e4e7;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+/* ============================================
+   Prose (markdown rendering)
+   ============================================ */
+
+.prose-readme { color: var(--foreground); }
+.prose-readme h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.75rem; }
+.prose-readme h2 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: var(--foreground); }
+.prose-readme h3 { font-size: 0.875rem; font-weight: 600; margin: 1rem 0 0.375rem; }
+.prose-readme p { margin: 0.5rem 0; color: var(--muted-foreground); }
+.prose-readme a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.prose-readme a:hover { opacity: 0.8; }
+.prose-readme ul, .prose-readme ol { margin: 0.5rem 0; padding-left: 1.5rem; color: var(--muted-foreground); }
+.prose-readme li { margin: 0.25rem 0; }
+.prose-readme blockquote { margin: 0.75rem 0; padding: 0.5rem 1rem; border-left: 3px solid var(--border); color: var(--muted-foreground); background-color: var(--muted); border-radius: 0 0.25rem 0.25rem 0; }
+.prose-readme blockquote strong { color: var(--foreground); }
+.prose-readme table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.8125rem; }
+.prose-readme th { text-align: left; padding: 0.375rem 0.75rem; border-bottom: 2px solid var(--border); font-weight: 600; color: var(--foreground); }
+.prose-readme td { padding: 0.375rem 0.75rem; border-bottom: 1px solid var(--border); color: var(--muted-foreground); }
+.prose-readme code { font-size: 0.8125rem; padding: 0.125rem 0.375rem; border-radius: 0.25rem; background-color: var(--muted); }
+.prose-readme pre { margin: 0.75rem 0; padding: 0.75rem 1rem; border-radius: 0.375rem; background-color: var(--muted); overflow-x: auto; }
+.prose-readme pre code { padding: 0; background: none; }
+.prose-readme > :first-child { margin-top: 0; }
+.prose-readme hr { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }

@@ -1,0 +1,1029 @@
+{% extends "base.html" %}
+{% block title %}执行评测 - HolyEval{% endblock %}
+
+{% block content %}
+<div x-data="taskManager()" x-init="init()">
+    <div class="mb-6">
+        <h1 class="text-xl font-semibold tracking-tight">执行评测</h1>
+        <p class="text-sm text-muted-foreground mt-1">选择 benchmark 数据集，配置执行参数，发起评测任务</p>
+    </div>
+
+    <!-- ====== 检查点恢复提示 ====== -->
+    <template x-if="checkpoints.length > 0">
+        <div class="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4 mb-5">
+            <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                </svg>
+                <div class="flex-1">
+                    <h3 class="text-sm font-medium text-amber-800 dark:text-amber-200">发现未完成的评测任务</h3>
+                    <div class="mt-2 space-y-2">
+                        <template x-for="cp in checkpoints" :key="cp.session_id">
+                            <div class="flex items-center gap-3 text-sm">
+                                <span class="font-medium" x-text="cp.benchmark + '/' + cp.dataset"></span>
+                                <span class="text-muted-foreground tabular-nums" x-text="'已完成 ' + cp.completed_count + '/' + cp.case_count"></span>
+                                <span class="text-xs text-muted-foreground" x-text="cp.target_type"></span>
+                                <div class="ml-auto flex items-center gap-2">
+                                    <button @click="resumeCheckpoint(cp.session_id)"
+                                            class="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 transition-colors">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/></svg>
+                                        继续执行
+                                    </button>
+                                    <button @click="deleteCheckpoint(cp.session_id)"
+                                            class="inline-flex items-center rounded-md px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                                        放弃
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== Step 1: Select benchmark & dataset ====== -->
+    <div class="rounded-lg border border-border bg-card mb-5">
+        <div class="px-5 py-3 border-b border-border flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">1</span>
+            <h2 class="text-sm font-medium">选择数据集</h2>
+        </div>
+        <div class="p-5">
+            <div class="flex flex-wrap items-end gap-4">
+                <!-- Benchmark -->
+                <div class="flex flex-col gap-1.5 min-w-[280px]" x-data="{ open: false }" @click.away="open = false">
+                    <label class="text-xs font-medium text-muted-foreground">Benchmark</label>
+                    <div class="relative">
+                        <button type="button" @click="open = !open" class="sh-select-trigger" :data-state="open ? 'open' : 'closed'">
+                            <span :class="!form.benchmark && 'placeholder'" x-text="form.benchmark || '选择评测类型'"></span>
+                            <svg class="w-4 h-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                        </button>
+                        <div x-show="open" x-transition.opacity class="sh-select-content">
+                            <template x-for="b in benchmarks" :key="b.name">
+                                <div @click="form.benchmark = b.name; onBenchmarkChange(); open = false"
+                                     class="sh-select-item" :class="form.benchmark === b.name && 'selected'">
+                                    <span x-text="b.name"></span>
+                                    <template x-if="b.prepare_status === 'running'">
+                                        <svg class="w-3.5 h-3.5 animate-spin text-blue-500 shrink-0 ml-1.5" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="b.prepare_status === 'error'">
+                                        <svg class="w-3.5 h-3.5 text-red-500 shrink-0 ml-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                                        </svg>
+                                    </template>
+                                    <span class="ml-auto text-xs text-muted-foreground" x-text="b.datasets.length + ' 个数据集'"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dataset -->
+                <div class="flex flex-col gap-1.5 min-w-[360px]" x-data="{ open: false }" @click.away="open = false">
+                    <label class="text-xs font-medium text-muted-foreground">Dataset</label>
+                    <div class="relative">
+                        <button type="button" @click="open = !open" class="sh-select-trigger" :data-state="open ? 'open' : 'closed'" :disabled="!form.benchmark">
+                            <span :class="!form.dataset && 'placeholder'" x-text="form.dataset ? (form.dataset + ' (' + (datasets.find(d=>d.name===form.dataset)?.case_count||0) + ' 条)') : '选择数据集'"></span>
+                            <svg class="w-4 h-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                        </button>
+                        <div x-show="open" x-transition.opacity class="sh-select-content w-max min-w-full">
+                            <template x-for="d in datasets" :key="d.name">
+                                <div @click="form.dataset = d.name; onDatasetChange(); open = false"
+                                     class="sh-select-item whitespace-nowrap" :class="form.dataset === d.name && 'selected'">
+                                    <span x-text="d.name"></span>
+                                    <span class="ml-auto text-xs text-muted-foreground tabular-nums" x-text="datasetHint(d)"></span>
+                                </div>
+                            </template>
+                            <div x-show="datasets.length === 0" class="sh-select-item text-muted-foreground">请先选择 Benchmark</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== 准备脚本状态提示 ====== -->
+    <template x-if="prepareStatus === 'running'">
+        <div class="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-4 mb-5">
+            <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 animate-spin text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <div>
+                    <h3 class="text-sm font-medium text-blue-800 dark:text-blue-200">数据准备中...</h3>
+                    <p class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">正在运行数据准备脚本，完成后即可执行评测</p>
+                </div>
+            </div>
+        </div>
+    </template>
+    <template x-if="prepareStatus === 'error'">
+        <div class="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 p-4 mb-5">
+            <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-red-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                </svg>
+                <div>
+                    <h3 class="text-sm font-medium text-red-800 dark:text-red-200">数据准备失败</h3>
+                    <p class="text-xs text-red-600 dark:text-red-400 mt-0.5 font-mono whitespace-pre-wrap max-h-24 overflow-auto" x-text="prepareError || '未知错误'"></p>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- ====== Step 2: Run config ====== -->
+    <div x-show="form.dataset" x-transition class="rounded-lg border border-border bg-card mb-5">
+        <div class="px-5 py-3 border-b border-border flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">2</span>
+            <h2 class="text-sm font-medium">执行配置</h2>
+            <span class="text-xs text-muted-foreground" x-text="'共 ' + caseSummaries.length.toLocaleString() + ' 条用例'"></span>
+        </div>
+        <div class="p-5">
+            <form @submit.prevent="createTask()">
+                <!-- Target config -->
+                <div class="mb-4">
+                    <label class="text-xs font-medium text-muted-foreground mb-2 block">被测系统</label>
+
+                    <!-- schema-driven 表单（field-level 编辑权限） -->
+                    <div>
+                        <div class="grid grid-cols-12 gap-x-4 gap-y-3 items-end">
+                            <!-- Type selector — 固定 1/3 宽；metadata 指定 type 时锁定 -->
+                            <div class="col-span-12 sm:col-span-4 flex flex-col gap-1.5" x-data="{ open: false }" @click.away="open = false">
+                                <label class="text-[11px] text-muted-foreground">Type <span class="text-red-500">*</span></label>
+                                <div class="relative">
+                                    <template x-if="targetTypeLocked">
+                                        <div class="sh-select-trigger cursor-default opacity-70">
+                                            <span x-text="form.target_type"></span>
+                                            <svg class="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
+                                        </div>
+                                    </template>
+                                    <template x-if="!targetTypeLocked">
+                                        <div>
+                                            <button type="button" @click="open = !open" class="sh-select-trigger" :data-state="open ? 'open' : 'closed'">
+                                                <span :class="!form.target_type && 'placeholder'" x-text="form.target_type || '选择类型'"></span>
+                                                <svg class="w-4 h-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                                            </button>
+                                            <div x-show="open" x-transition.opacity class="sh-select-content w-max min-w-full">
+                                                <template x-for="ta in availableTargetTypes" :key="ta.name">
+                                                    <div @click="form.target_type = ta.name; applyCurrentSpecDefaults(); open = false"
+                                                         class="sh-select-item whitespace-nowrap" :class="form.target_type === ta.name && 'selected'">
+                                                        <span x-text="ta.name"></span>
+                                                        <span class="ml-auto text-xs text-muted-foreground" x-text="ta.short_desc"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- Dynamic fields — field-level 编辑权限 -->
+                            <template x-for="field in targetFields" :key="field.name">
+                                <div class="flex flex-col gap-1.5"
+                                     :class="fieldSpanClass(field)"
+                                     x-data="{ open: false }" @click.away="open = false">
+                                    <label class="text-[11px] text-muted-foreground flex items-center gap-1">
+                                        <span x-text="field.title"></span>
+                                        <template x-if="field.required && field.editable"><span class="text-red-500"> *</span></template>
+                                        <template x-if="!field.editable">
+                                            <svg class="w-3 h-3 text-muted-foreground/50" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
+                                        </template>
+                                        <template x-if="!field.required && field.editable"><span class="text-muted-foreground/60">（选填）</span></template>
+                                    </label>
+                                    <!-- 非 editable → 只读展示 -->
+                                    <template x-if="!field.editable">
+                                        <div class="sh-input cursor-default opacity-60 bg-muted/40">
+                                            <span class="min-w-0 truncate" x-text="targetValues[field.name] || field.default || '—'"></span>
+                                        </div>
+                                    </template>
+                                    <!-- Editable + Enum → custom select -->
+                                    <template x-if="field.editable && field.enum">
+                                        <div class="relative">
+                                            <button type="button" @click="open = !open" class="sh-select-trigger" :data-state="open ? 'open' : 'closed'">
+                                                <span :class="!targetValues[field.name] && 'placeholder'"
+                                                      x-text="targetValues[field.name] || ('选择' + field.title)"></span>
+                                                <svg class="w-4 h-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                                            </button>
+                                            <div x-show="open" x-transition.opacity class="sh-select-content">
+                                                <template x-for="opt in field.enum" :key="opt">
+                                                    <div @click="targetValues[field.name] = opt; open = false"
+                                                         class="sh-select-item" :class="targetValues[field.name] === opt && 'selected'">
+                                                        <span x-text="opt"></span>
+                                                        <template x-if="field.name === 'model' && _modelMeta[opt]">
+                                                            <span class="text-muted-foreground text-[11px] ml-1" x-text="'$' + _modelMeta[opt].price + ' · ' + _modelMeta[opt].date"></span>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <!-- Editable + String → text input -->
+                                    <template x-if="field.editable && !field.enum">
+                                        <input type="text"
+                                               :value="targetValues[field.name] || ''"
+                                               @input="targetValues[field.name] = $event.target.value"
+                                               :placeholder="field.default || ''"
+                                               class="sh-input">
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scope selection -->
+                <div class="mb-4">
+                    <label class="text-xs font-medium text-muted-foreground mb-2 block">执行范围</label>
+                    <div class="flex gap-2">
+                        <button type="button" @click="form.scope = 'all'; selectedIds = []" class="sh-btn sh-btn-sm"
+                                :class="form.scope === 'all' ? 'sh-btn-primary' : 'sh-btn-secondary'">
+                            全部用例
+                        </button>
+                        <button type="button" @click="form.scope = 'ids'" class="sh-btn sh-btn-sm"
+                                :class="form.scope === 'ids' ? 'sh-btn-primary' : 'sh-btn-secondary'">
+                            指定 ID
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Checkbox case list (shown when scope=ids) -->
+                <div x-show="form.scope === 'ids'" x-transition class="mb-4">
+                    <!-- Header with select controls -->
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-xs font-medium text-muted-foreground">
+                            选择用例
+                            <span class="text-foreground" x-text="'（已选 ' + selectedIds.length + ' / ' + caseSummaries.length + ' 条）'"></span>
+                        </label>
+                        <div class="flex items-center gap-2" x-show="caseSummaries.length > 0">
+                            <button type="button" @click="toggleSelectAll()" class="agent-detail-toggle" :class="selectedIds.length === caseSummaries.length && 'active'">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <span x-text="selectedIds.length === caseSummaries.length ? '取消全选' : '全选'"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Search -->
+                    <div class="relative mb-2">
+                        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
+                        <input type="text" x-model="searchQuery" @input="summaryPage = 0" placeholder="搜索 ID 或内容..." class="sh-input pl-9 w-full">
+                    </div>
+
+                    <!-- Loading -->
+                    <div x-show="previewLoading" class="py-6 text-center text-sm text-muted-foreground border border-border rounded-lg">
+                        <svg class="w-5 h-5 mx-auto mb-2 animate-spin text-muted-foreground" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        加载用例列表...
+                    </div>
+
+                    <!-- Checkbox list with pagination -->
+                    <div x-show="!previewLoading && caseSummaries.length > 0" class="border border-border rounded-lg overflow-hidden">
+                        <div class="divide-y divide-border">
+                            <template x-for="c in pagedSummaries" :key="c.id">
+                                <label class="sh-checkbox px-4 py-2.5 flex items-center gap-3 table-row-hover cursor-pointer">
+                                    <input type="checkbox" :value="c.id" x-model="selectedIds" class="sr-only">
+                                    <span class="sh-checkbox-box shrink-0">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+                                    </span>
+                                    <span class="text-xs font-mono font-medium shrink-0" x-text="c.id"></span>
+                                    <span class="text-xs text-muted-foreground truncate" x-text="c.title"></span>
+                                    <span class="ml-auto badge badge-secondary text-[10px] shrink-0" x-show="c.evaluator" x-text="c.evaluator"></span>
+                                </label>
+                            </template>
+                        </div>
+
+                        <!-- Empty search result -->
+                        <div x-show="filteredSummaries.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
+                            未找到匹配的用例
+                        </div>
+
+                        <!-- Pagination -->
+                        <div x-show="summaryTotalPages > 1" class="px-4 py-2 border-t border-border flex items-center justify-between bg-muted/30">
+                            <span class="text-xs text-muted-foreground" x-text="'第 ' + (summaryPage * summaryPageSize + 1) + '-' + Math.min((summaryPage + 1) * summaryPageSize, filteredSummaries.length) + ' / ' + filteredSummaries.length + ' 条'"></span>
+                            <div class="flex items-center gap-2">
+                                <button type="button" @click="summaryPage = Math.max(0, summaryPage - 1)" :disabled="summaryPage === 0" class="sh-btn sh-btn-secondary sh-btn-sm px-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+                                </button>
+                                <span class="text-xs text-muted-foreground" x-text="(summaryPage + 1) + ' / ' + summaryTotalPages"></span>
+                                <button type="button" @click="summaryPage = Math.min(summaryTotalPages - 1, summaryPage + 1)" :disabled="summaryPage >= summaryTotalPages - 1" class="sh-btn sh-btn-secondary sh-btn-sm px-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Other params -->
+                <div class="flex flex-wrap items-end gap-4">
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-muted-foreground">Limit（最大执行数）</label>
+                        <input type="number" x-model.number="form.limit" placeholder="不限" min="1" class="sh-input w-28"
+                               :disabled="form.scope === 'ids'">
+                    </div>
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-xs font-medium text-muted-foreground">并发数</label>
+                        <input type="number" x-model.number="form.max_concurrency" min="1" max="20" class="sh-input w-28">
+                    </div>
+                    <button type="submit" :disabled="!canSubmit || submitting" class="sh-btn sh-btn-primary gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/></svg>
+                        <span x-show="!submitting">开始评测</span>
+                        <span x-show="submitting">创建中...</span>
+                    </button>
+                </div>
+
+                <!-- Run summary with cost/time estimate -->
+                <div class="mt-3 text-xs text-muted-foreground" x-show="form.dataset">
+                    <span x-text="runSummary"></span>
+                    <span x-show="runEstimate" class="ml-1 text-foreground/70" x-text="runEstimate"></span>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ====== Data preview (collapsible, only in 'all' mode) ====== -->
+    <div x-show="form.dataset && form.scope === 'all'" x-transition class="rounded-lg border border-border bg-card mb-5" x-data="{ showPreview: true }">
+        <div class="px-5 py-3 cursor-pointer" @click="showPreview = !showPreview">
+            <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-muted-foreground transition-transform shrink-0" :class="showPreview && 'rotate-90'" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                <h2 class="text-sm font-medium shrink-0">数据预览</h2>
+                <span class="text-xs text-muted-foreground shrink-0" x-text="caseSummaries.length > 0 ? ('前 ' + Math.min(preview.cases.length, caseSummaries.length) + ' 条 / 共 ' + caseSummaries.length.toLocaleString() + ' 条') : ''"></span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mt-2 ml-6" x-show="!showPreview && Object.keys(preview.tags).length > 0">
+                <template x-for="[tag, count] in Object.entries(preview.tags).slice(0, 5)" :key="tag">
+                    <span class="badge badge-outline text-[10px]" x-text="tag + ' ' + count"></span>
+                </template>
+                <span x-show="Object.keys(preview.tags).length > 5" class="text-[10px] text-muted-foreground" x-text="'+' + (Object.keys(preview.tags).length - 5)"></span>
+            </div>
+        </div>
+
+        <div x-show="showPreview" x-transition>
+            <div x-show="previewLoading" class="px-5 py-8 text-center text-sm text-muted-foreground border-t border-border">
+                <svg class="w-5 h-5 mx-auto mb-2 animate-spin text-muted-foreground" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                加载数据...
+            </div>
+
+            <div x-show="!previewLoading && Object.keys(preview.tags).length > 0" class="px-5 pt-3 pb-2 border-t border-border">
+                <div class="flex flex-wrap gap-1.5">
+                    <template x-for="[tag, count] in Object.entries(preview.tags).slice(0, 20)" :key="tag">
+                        <span class="badge badge-outline text-xs">
+                            <span x-text="tag"></span>
+                            <span class="ml-1 text-muted-foreground" x-text="count"></span>
+                        </span>
+                    </template>
+                </div>
+            </div>
+
+            <div x-show="!previewLoading && preview.cases.length > 0" class="border-t border-border divide-y divide-border">
+                <template x-for="(c, i) in pagedPreviewCases" :key="c.id || i">
+                    <div class="px-5 py-3 table-row-hover" x-data="{ expanded: false }">
+                        <div @click="expanded = !expanded" class="cursor-pointer flex items-center gap-2">
+                            <svg class="w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform" :class="expanded && 'rotate-90'" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                            <span class="text-xs font-mono font-medium" x-text="c.id"></span>
+                            <span class="text-xs text-muted-foreground truncate" x-text="getPreviewText(c)"></span>
+                            <span class="ml-auto badge badge-secondary text-[10px] shrink-0" x-show="c.eval?.evaluator" x-text="c.eval?.evaluator"></span>
+                        </div>
+                        <div x-show="expanded" x-transition class="mt-2 ml-6">
+                            <pre class="code-block text-xs whitespace-pre-wrap max-h-64 overflow-y-auto" x-text="JSON.stringify(c, null, 2)"></pre>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div x-show="!previewLoading && previewTotalPages > 1" class="px-5 py-2.5 border-t border-border flex items-center justify-between">
+                <span class="text-xs text-muted-foreground" x-text="'第 ' + (previewPage * previewPageSize + 1) + '-' + Math.min((previewPage + 1) * previewPageSize, preview.cases.length) + ' 条预览'"></span>
+                <div class="flex gap-1">
+                    <button @click="previewPage = Math.max(0, previewPage - 1)" :disabled="previewPage === 0" class="sh-btn sh-btn-secondary sh-btn-sm px-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+                    </button>
+                    <button @click="previewPage = Math.min(previewTotalPages - 1, previewPage + 1)" :disabled="previewPage >= previewTotalPages - 1" class="sh-btn sh-btn-secondary sh-btn-sm px-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== Active tasks ====== -->
+    <div x-show="activeTasks.length > 0" class="rounded-lg border border-border bg-card mb-5">
+        <div class="px-5 py-3 border-b border-border flex items-center justify-between">
+            <h2 class="text-sm font-medium">运行中的任务</h2>
+            <span class="text-xs text-muted-foreground" x-text="activeTasks.length + ' 个'"></span>
+        </div>
+        <div class="divide-y divide-border">
+            <template x-for="task in activeTasks" :key="task.task_id">
+                <a :href="'/tasks/' + task.task_id" class="px-5 py-3 flex items-center gap-4 table-row-hover block">
+                    <span class="badge text-xs" :class="'status-' + task.status" x-text="task.status"></span>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-medium" x-text="task.benchmark + ' / ' + task.dataset"></div>
+                        <div class="text-xs text-muted-foreground mt-0.5" x-text="formatTime(task.created_at)"></div>
+                    </div>
+                    <div class="w-36 flex items-center gap-2">
+                        <div class="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
+                            <div class="h-full rounded-full progress-bar"
+                                 :class="task.status === 'completed' ? 'bg-success' : 'bg-blue-500'"
+                                 :style="`width: ${task.total > 0 ? (task.completed / task.total * 100) : 0}%`"></div>
+                        </div>
+                        <span class="text-xs text-muted-foreground whitespace-nowrap" x-text="task.completed + '/' + task.total"></span>
+                    </div>
+                </a>
+            </template>
+        </div>
+    </div>
+
+    <!-- ====== Historical reports ====== -->
+    <div class="rounded-lg border border-border bg-card">
+        <div class="px-5 py-3 border-b border-border flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+                <h2 class="text-sm font-medium">历史报告</h2>
+                <span class="text-xs text-muted-foreground" x-text="searchedReports.length + ' / ' + filteredReports.length + ' 份'"></span>
+            </div>
+            <!-- 筛选栏 -->
+            <div class="flex items-center gap-3" x-show="reports.length > 0">
+                <!-- Benchmark 筛选 -->
+                <div class="min-w-[160px]" x-data="{ open: false }" @click.away="open = false">
+                    <div class="relative">
+                        <button type="button" @click="!form.benchmark && (open = !open)" class="sh-select-trigger !h-8 !text-xs" :class="form.benchmark && 'opacity-60 cursor-not-allowed'" :data-state="open ? 'open' : 'closed'">
+                            <span :class="!effectiveReportBench && 'placeholder'" x-text="effectiveReportBench || '全部 Benchmark'"></span>
+                            <svg class="w-3.5 h-3.5 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                        </button>
+                        <div x-show="open" x-transition.opacity class="sh-select-content">
+                            <div @click="reportFilterBench = ''; reportFilterName = ''; reportPage = 0; open = false"
+                                 class="sh-select-item !text-xs" :class="!reportFilterBench && 'selected'">
+                                全部 Benchmark
+                            </div>
+                            <template x-for="b in reportBenchmarks" :key="b">
+                                <div @click="reportFilterBench = b; reportFilterName = ''; reportPage = 0; open = false"
+                                     class="sh-select-item !text-xs" :class="reportFilterBench === b && 'selected'">
+                                    <span x-text="b"></span>
+                                    <span class="ml-auto text-[10px] text-muted-foreground" x-text="reports.filter(r => r.benchmark === b).length + ' 份'"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                <!-- 文件名筛选 -->
+                <div class="min-w-[280px]" x-data="{ open: false }" @click.away="open = false">
+                    <div class="relative">
+                        <button type="button" @click="open = !open" class="sh-select-trigger !h-8 !text-xs font-mono" :data-state="open ? 'open' : 'closed'">
+                            <span :class="!reportFilterName && 'placeholder'" class="truncate" x-text="reportFilterName || '全部文件'"></span>
+                            <svg class="w-3.5 h-3.5 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                        </button>
+                        <div x-show="open" x-transition.opacity class="sh-select-content w-max min-w-full">
+                            <div @click="reportFilterName = ''; reportPage = 0; open = false"
+                                 class="sh-select-item !text-xs" :class="!reportFilterName && 'selected'">
+                                全部文件
+                            </div>
+                            <template x-for="fn in reportFilenames" :key="fn">
+                                <div @click="reportFilterName = fn; reportPage = 0; open = false"
+                                     class="sh-select-item !text-xs font-mono" :class="reportFilterName === fn && 'selected'">
+                                    <span x-text="fn"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                <!-- 关键词搜索 -->
+                <div class="relative flex-1 min-w-[220px] max-w-md">
+                    <svg class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
+                    <input type="text"
+                           x-model="reportSearchQuery"
+                           @input="reportPage = 0"
+                           placeholder="搜索 benchmark / dataset / 文件名"
+                           class="sh-input !h-8 !text-xs pl-8 w-full">
+                </div>
+                <!-- 清除按钮 -->
+                <button x-show="reportFilterBench || reportFilterName || reportSearchQuery" @click="reportFilterBench = ''; reportFilterName = ''; reportSearchQuery = ''; reportPage = 0"
+                        class="h-8 px-2.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors whitespace-nowrap">
+                    清除筛选
+                </button>
+            </div>
+        </div>
+        <div class="divide-y divide-border" x-show="searchedReports.length > 0">
+            <template x-for="r in pagedReports" :key="r.benchmark + ':' + r.filename">
+                <div class="px-5 py-3 flex items-center gap-4 table-row-hover group">
+                    <a :href="'/reports/' + r.benchmark + '/' + r.filename" class="flex items-center gap-4 flex-1 min-w-0">
+                        <span class="badge badge-success text-xs">completed</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium" x-text="r.benchmark + ' / ' + r.dataset"></span>
+                                <span x-show="r.target_label" class="badge badge-outline text-[10px]" x-text="r.target_label"></span>
+                            </div>
+                            <div class="text-xs text-muted-foreground mt-0.5" x-text="formatReportDate(r.date)"></div>
+                        </div>
+                        <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+                            <span class="font-mono" x-text="r.filename"></span>
+                        </div>
+                    </a>
+                    <button @click.stop="deleteReport(r.benchmark, r.filename)"
+                            class="opacity-0 group-hover:opacity-100 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all shrink-0"
+                            title="删除报告">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+                    </button>
+                </div>
+            </template>
+        </div>
+        <div x-show="searchedReports.length > 0 && reportTotalPages > 1" class="px-5 py-2.5 border-t border-border flex items-center justify-between">
+            <span class="text-xs text-muted-foreground" x-text="'第 ' + (Math.min(reportPage, reportTotalPages - 1) * reportPageSize + 1) + '-' + Math.min((Math.min(reportPage, reportTotalPages - 1) + 1) * reportPageSize, searchedReports.length) + ' / ' + searchedReports.length + ' 份'"></span>
+            <div class="flex items-center gap-2">
+                <button type="button" @click="reportPage = Math.max(0, reportPage - 1)" :disabled="reportPage === 0" class="sh-btn sh-btn-secondary sh-btn-sm px-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+                </button>
+                <span class="text-xs text-muted-foreground" x-text="(Math.min(reportPage, reportTotalPages - 1) + 1) + ' / ' + reportTotalPages"></span>
+                <button type="button" @click="reportPage = Math.min(reportTotalPages - 1, reportPage + 1)" :disabled="reportPage >= reportTotalPages - 1" class="sh-btn sh-btn-secondary sh-btn-sm px-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                </button>
+            </div>
+        </div>
+        <div x-show="searchedReports.length === 0 && reports.length > 0" class="px-5 py-10 text-center text-sm text-muted-foreground">
+            无匹配的报告
+        </div>
+        <div x-show="reports.length === 0" class="px-5 py-10 text-center text-sm text-muted-foreground">
+            暂无历史报告
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "partials/cost_estimate.html" %}
+<script>
+
+/* 长文本字段名模式 — 匹配时分配全宽 */
+const _fullWidthPattern = /prompt|description|note|message|content/i;
+
+function taskManager() {
+    return {
+        benchmarks: [], datasets: [], tasks: [], reports: [], checkpoints: [],
+        reportFilterBench: '', reportFilterName: '', reportSearchQuery: '',
+        form: {
+            benchmark: '', dataset: '', scope: 'all', limit: null, max_concurrency: 3,
+            target_type: '',
+        },
+        // schema-driven target config
+        targetAgentList: [],    // [{name, short_desc}]
+        targetSchemas: {},      // { type_name: { fields: [...] } }
+        targetValues: {},       // { field_name: value }
+        targetSpecs: [],        // metadata.json TargetSpec 列表（支持多 target 类型）
+        targetTypeLocked: false,  // 仅单个 spec 时锁定类型选择
+        currentEvaluator: '',     // 当前选中 dataset 的评估器类型
+
+        prepareStatus: null,    // null | "running" | "completed" | "error"
+        prepareError: null,
+
+        preview: { cases: [], tags: {} },
+        caseSummaries: [],
+        selectedIds: [],
+        searchQuery: '',
+        previewLoading: false,
+        submitting: false, pollTimer: null,
+        summaryPage: 0, summaryPageSize: 20,
+        previewPage: 0, previewPageSize: 10,
+        reportPage: 0, reportPageSize: 10,
+
+        /* ---- 字段尺寸分类（通用） ---- */
+        fieldSpanClass(field) {
+            // 长文本字段（prompt / description / ...）→ 全宽独占一行
+            if (!field.enum && _fullWidthPattern.test(field.name)) {
+                return 'col-span-12';
+            }
+            // model 字段选项名较长（含厂商前缀 + 价格标注）→ 2/3 宽度
+            if (field.name === 'model') {
+                return 'col-span-12 sm:col-span-8';
+            }
+            // 枚举、短文本 → 1/3 宽度
+            return 'col-span-12 sm:col-span-4';
+        },
+
+        /* ---- 费用 / 耗时预估（使用 cost_estimate.html 两因子模型，数据来自 plugin _cost_meta） ---- */
+        estCost(count) {
+            const targetType = this.form.target_type || '';
+            const model = this.targetValues?.model || '';
+            return _estTotalCost(count, targetType, model, this.currentEvaluator);
+        },
+        estCostLabel(count) { return _estCostLabel(this.estCost(count)); },
+        estTime(count) {
+            const conc = this.form.max_concurrency || 5;
+            return _estTime(count, conc);
+        },
+        estTimeLabel(count) {
+            const conc = this.form.max_concurrency || 5;
+            return _estTimeLabel(count, conc);
+        },
+
+        /* Dataset 下拉框文本：用例数 + 费用 + 耗时 */
+        datasetHint(d) {
+            const parts = [d.case_count.toLocaleString() + ' 条'];
+            const cost = this.estCostLabel(d.case_count);
+            if (cost !== '—') parts.push(cost);
+            parts.push(this.estTimeLabel(d.case_count));
+            return parts.join(' · ');
+        },
+
+        /* 从 targetSpecs 列表中查找当前选中 target_type 对应的 spec */
+        get currentTargetSpec() {
+            return this.targetSpecs.find(s => s.type === this.form.target_type) || null;
+        },
+        /* 可选的 target 类型列表（有 specs 时仅展示 specs 中的类型，否则全部） */
+        get availableTargetTypes() {
+            if (this.targetSpecs.length > 0) {
+                const specTypes = new Set(this.targetSpecs.map(s => s.type));
+                return this.targetAgentList.filter(ta => specTypes.has(ta.name));
+            }
+            return this.targetAgentList;
+        },
+        /* 切换 target type 后，从对应 spec 填充默认值 */
+        applyCurrentSpecDefaults() {
+            this.resetTargetValues();
+            const spec = this.currentTargetSpec;
+            if (spec?.fields) {
+                for (const [name, fieldSpec] of Object.entries(spec.fields)) {
+                    if (fieldSpec.default !== undefined && fieldSpec.default !== null) {
+                        this.targetValues[name] = fieldSpec.default;
+                    }
+                }
+            }
+        },
+        get targetFields() {
+            const schema = this.targetSchemas[this.form.target_type];
+            if (!schema) return [];
+            const spec = this.currentTargetSpec;
+            // 无 spec → 全部字段可编辑（fallback）
+            if (!spec || !spec.fields) return schema.fields.map(f => ({ ...f, editable: true }));
+            // 有 spec → 仅展示 spec 中声明的字段，合并 agent schema 的 enum/title/description
+            const agentFieldMap = {};
+            for (const f of schema.fields) agentFieldMap[f.name] = f;
+            const result = [];
+            for (const [name, fieldSpec] of Object.entries(spec.fields)) {
+                const agentField = agentFieldMap[name] || {};
+                result.push({
+                    name,
+                    title: agentField.title || name,
+                    description: agentField.description || '',
+                    required: fieldSpec.required ?? false,
+                    enum: agentField.enum || null,
+                    default: fieldSpec.default ?? agentField.default ?? null,
+                    editable: fieldSpec.editable ?? true,
+                });
+            }
+            return result;
+        },
+        get canSubmit() {
+            if (!this.form.benchmark || !this.form.dataset) return false;
+            if (this.prepareStatus === 'running' || this.prepareStatus === 'error') return false;
+            if (!this.form.target_type) return false;
+            for (const f of this.targetFields) {
+                if (f.required && !this.targetValues[f.name]) return false;
+            }
+            if (this.form.scope === 'ids' && this.selectedIds.length === 0) return false;
+            return true;
+        },
+        get filteredSummaries() {
+            const q = this.searchQuery.trim().toLowerCase();
+            if (!q) return this.caseSummaries;
+            return this.caseSummaries.filter(c =>
+                c.id.toLowerCase().includes(q) || c.title.toLowerCase().includes(q)
+            );
+        },
+        get summaryTotalPages() { return Math.max(1, Math.ceil(this.filteredSummaries.length / this.summaryPageSize)); },
+        get pagedSummaries() {
+            const start = this.summaryPage * this.summaryPageSize;
+            return this.filteredSummaries.slice(start, start + this.summaryPageSize);
+        },
+        get previewTotalPages() { return Math.max(1, Math.ceil(this.preview.cases.length / this.previewPageSize)); },
+        get pagedPreviewCases() {
+            const start = this.previewPage * this.previewPageSize;
+            return this.preview.cases.slice(start, start + this.previewPageSize);
+        },
+        /* 实际执行数量 */
+        get runCaseCount() {
+            if (this.form.scope === 'ids') return this.selectedIds.length;
+            const total = this.caseSummaries.length;
+            return (this.form.limit && this.form.limit < total) ? this.form.limit : total;
+        },
+        get runSummary() {
+            if (this.form.scope === 'ids') {
+                const n = this.selectedIds.length;
+                return n > 0 ? `将执行 ${n} 条指定用例` : '请选择用例';
+            }
+            const total = this.caseSummaries.length;
+            if (this.form.limit && this.form.limit < total) {
+                return `将从 ${total.toLocaleString()} 条中执行前 ${this.form.limit} 条`;
+            }
+            return `将执行全部 ${total.toLocaleString()} 条用例`;
+        },
+        get runEstimate() {
+            const n = this.runCaseCount;
+            if (n <= 0) return '';
+            const cost = this.estCostLabel(n);
+            const time = this.estTimeLabel(n);
+            const parts = [];
+            if (cost !== '—') parts.push('预估 ' + cost);
+            parts.push(time);
+            return parts.length > 0 ? '· ' + parts.join(' · ') : '';
+        },
+
+        toggleSelectAll() {
+            const visible = this.filteredSummaries;
+            const visibleIds = visible.map(c => c.id);
+            const allVisibleSelected = visibleIds.every(id => this.selectedIds.includes(id));
+            if (allVisibleSelected) {
+                // 取消当前可见的
+                this.selectedIds = this.selectedIds.filter(id => !visibleIds.includes(id));
+            } else {
+                // 选中当前可见的（保留已有的）
+                const merged = new Set([...this.selectedIds, ...visibleIds]);
+                this.selectedIds = [...merged];
+            }
+        },
+
+        async init() {
+            const [bmRes, rpRes, taRes, eaRes] = await Promise.all([
+                fetch('/api/benchmarks'), fetch('/api/reports'), fetch('/api/agents/target'), fetch('/api/agents/eval'),
+            ]);
+            this.benchmarks = await bmRes.json();
+            const rpData = await rpRes.json();
+            this.reports = rpData.reports || [];
+
+            // 初始化费用预估元数据（来自 plugin _cost_meta）
+            const agents = await taRes.json();
+            const evalAgents = await eaRes.json();
+            _initCostMeta(evalAgents, agents);
+            for (const agent of agents) {
+                const schema = agent.config_schema;
+                const required = new Set(schema.required || []);
+                const fields = [];
+                for (const [name, prop] of Object.entries(schema.properties || {})) {
+                    if (name === 'type') continue;
+                    let enumValues = prop.enum || null;
+                    // anyOf 处理（Pydantic Optional 字段）
+                    if (!enumValues && prop.anyOf) {
+                        for (const sub of prop.anyOf) {
+                            if (sub.enum) enumValues = sub.enum;
+                        }
+                    }
+                    fields.push({
+                        name,
+                        title: prop.title || name,
+                        description: prop.description || '',
+                        required: required.has(name),
+                        enum: enumValues,
+                        default: prop.default ?? null,
+                    });
+                }
+                this.targetSchemas[agent.name] = { fields };
+                this.targetAgentList.push({ name: agent.name, short_desc: agent.short_desc });
+            }
+            // 默认选中第一个 target agent
+            if (this.targetAgentList.length > 0 && !this.form.target_type) {
+                this.form.target_type = this.targetAgentList[0].name;
+            }
+            this.resetTargetValues();
+
+            await this.refreshTasks();
+            await this.loadCheckpoints();
+            this.pollTimer = setInterval(() => this.refreshTasks(), 5000);
+
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('benchmark')) {
+                this.form.benchmark = params.get('benchmark');
+                this.onBenchmarkChange();
+                if (params.get('dataset')) {
+                    this.form.dataset = params.get('dataset');
+                    await this.loadPreview();
+                }
+            }
+        },
+        resetTargetValues() {
+            const schema = this.targetSchemas[this.form.target_type];
+            if (!schema) { this.targetValues = {}; return; }
+            const values = {};
+            for (const f of schema.fields) {
+                values[f.name] = (f.default !== null && f.default !== undefined) ? f.default : '';
+            }
+            this.targetValues = values;
+        },
+        onBenchmarkChange() {
+            this.form.dataset = '';
+            this.form.scope = 'all';
+            this.selectedIds = [];
+            this.searchQuery = '';
+            this.caseSummaries = [];
+            this.preview = { cases: [], tags: {} };
+            this.summaryPage = 0;
+            this.previewPage = 0;
+            // 重置报告区筛选（benchmark 已由顶部选择联动）
+            this.reportFilterBench = '';
+            this.reportFilterName = '';
+            this.reportPage = 0;
+            this.currentEvaluator = '';
+            const b = this.benchmarks.find(x => x.name === this.form.benchmark);
+            this.datasets = b ? b.datasets : [];
+            this.prepareStatus = b?.prepare_status || null;
+            this.prepareError = b?.prepare_error || null;
+            this.targetSpecs = b?.target || [];  // TargetSpec 列表
+            if (this.targetSpecs.length === 1) {
+                // 单 target → 锁定类型
+                this.form.target_type = this.targetSpecs[0].type;
+                this.targetTypeLocked = true;
+                this.applyCurrentSpecDefaults();
+            } else if (this.targetSpecs.length > 1) {
+                // 多 target → 用户可选，默认第一个
+                this.form.target_type = this.targetSpecs[0].type;
+                this.targetTypeLocked = false;
+                this.applyCurrentSpecDefaults();
+            } else {
+                // 无 spec → 完全自由选择
+                this.targetTypeLocked = false;
+                this.form.target_type = this.targetAgentList[0]?.name ?? '';
+                this.resetTargetValues();
+            }
+        },
+        // 应用一个 TargetSpec（设置 form.target_type、targetValues）
+        _applyTargetSpec(spec) {
+            this.form.target_type = spec.type;
+            this.resetTargetValues();
+            for (const [name, fieldSpec] of Object.entries(spec.fields || {})) {
+                if (fieldSpec.default !== undefined && fieldSpec.default !== null) {
+                    this.targetValues[name] = fieldSpec.default;
+                }
+            }
+            this.applyCurrentSpecDefaults();
+        },
+        async onDatasetChange() {
+            this.form.scope = 'all';
+            this.selectedIds = [];
+            this.searchQuery = '';
+            this.summaryPage = 0;
+            this.previewPage = 0;
+            // 从 datasets 中获取当前 dataset 的评估器类型
+            const ds = this.datasets.find(d => d.name === this.form.dataset);
+            this.currentEvaluator = ds?.evaluator || '';
+            await this.loadPreview();
+        },
+        async loadPreview() {
+            if (!this.form.benchmark || !this.form.dataset) return;
+            this.previewLoading = true;
+            try {
+                const res = await fetch(`/api/benchmarks/${this.form.benchmark}/${this.form.dataset}?preview_limit=20`);
+                if (res.ok) {
+                    const data = await res.json();
+                    this.caseSummaries = data.case_summaries || [];
+                    this.preview = { cases: data.cases_preview, tags: data.tag_distribution };
+                }
+            } finally { this.previewLoading = false; }
+        },
+        getPreviewText(c) {
+            if (c.history?.length > 0) {
+                const first = c.history[0];
+                const text = typeof first === 'string' ? first : (first.content || '');
+                return text.substring(0, 80) + (text.length > 80 ? '...' : '');
+            }
+            if (c.user?.strict_inputs?.length > 0) {
+                const t = c.user.strict_inputs[0];
+                return t.substring(0, 80) + (t.length > 80 ? '...' : '');
+            }
+            if (c.user?.goal) {
+                const t = c.user.goal;
+                return t.substring(0, 80) + (t.length > 80 ? '...' : '');
+            }
+            return '';
+        },
+        buildTarget() {
+            // 仅发送 editable 字段的值作为 cli_overrides（后端 resolve_effective_target 处理合并）
+            const target = {};
+            const editableNames = new Set(
+                this.targetFields.filter(f => f.editable).map(f => f.name)
+            );
+            for (const [k, v] of Object.entries(this.targetValues)) {
+                if (editableNames.has(k) && v !== '' && v !== null && v !== undefined) {
+                    target[k] = v;
+                }
+            }
+            return Object.keys(target).length > 0 ? target : null;
+        },
+        async createTask() {
+            this.submitting = true;
+            try {
+                const body = {
+                    benchmark: this.form.benchmark,
+                    dataset: this.form.dataset,
+                    target_type: this.form.target_type,
+                    max_concurrency: this.form.max_concurrency || 3,
+                };
+                const builtTarget = this.buildTarget();
+                if (builtTarget) {
+                    body.target = builtTarget;
+                }
+                if (this.form.scope === 'all' && this.form.limit) {
+                    body.limit = this.form.limit;
+                }
+                if (this.form.scope === 'ids') {
+                    body.ids = this.selectedIds.join(',');
+                }
+                const res = await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (!res.ok) { const err = await res.json(); alert(err.detail || '创建失败'); return; }
+                const task = await res.json();
+                window.location.href = '/tasks/' + task.task_id;
+            } finally { this.submitting = false; }
+        },
+        get activeTasks() { return this.tasks.filter(t => t.status === 'running'); },
+        /* ---- 报告筛选 ---- */
+        // 报告筛选的有效 benchmark：优先取顶部选中的 benchmark，其次取报告区下拉
+        get effectiveReportBench() {
+            return this.form.benchmark || this.reportFilterBench;
+        },
+        get reportBenchmarks() {
+            return [...new Set(this.reports.map(r => r.benchmark))].sort();
+        },
+        get reportFilenames() {
+            // 文件名列表跟随 benchmark 筛选联动
+            const base = this.effectiveReportBench
+                ? this.reports.filter(r => r.benchmark === this.effectiveReportBench)
+                : this.reports;
+            return base.map(r => r.filename);
+        },
+        get filteredReports() {
+            let list = this.reports;
+            if (this.effectiveReportBench) {
+                list = list.filter(r => r.benchmark === this.effectiveReportBench);
+            }
+            if (this.reportFilterName) {
+                list = list.filter(r => r.filename === this.reportFilterName);
+            }
+            return list;
+        },
+        get searchedReports() {
+            const q = this.reportSearchQuery.trim().toLowerCase();
+            if (!q) return this.filteredReports;
+            return this.filteredReports.filter(r => {
+                const text = [r.benchmark, r.dataset, r.filename, r.target_label, r.date]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+                return text.includes(q);
+            });
+        },
+        get reportTotalPages() { return Math.max(1, Math.ceil(this.searchedReports.length / this.reportPageSize)); },
+        get pagedReports() {
+            const safePage = Math.min(this.reportPage, this.reportTotalPages - 1);
+            const start = safePage * this.reportPageSize;
+            return this.searchedReports.slice(start, start + this.reportPageSize);
+        },
+        async refreshTasks() {
+            const [taskRes, bmRes] = await Promise.all([fetch('/api/tasks'), fetch('/api/benchmarks')]);
+            this.tasks = (await taskRes.json()).reverse();
+            this.benchmarks = await bmRes.json();
+            // 刷新当前选中 benchmark 的准备状态
+            if (this.form.benchmark) {
+                const b = this.benchmarks.find(x => x.name === this.form.benchmark);
+                this.prepareStatus = b?.prepare_status || null;
+                this.prepareError = b?.prepare_error || null;
+            }
+        },
+        async loadCheckpoints() {
+            try {
+                const res = await fetch('/api/checkpoints');
+                if (res.ok) this.checkpoints = await res.json();
+            } catch (e) { console.warn('加载检查点失败', e); }
+        },
+        async resumeCheckpoint(sessionId) {
+            try {
+                const res = await fetch(`/api/checkpoints/${sessionId}/resume`, { method: 'POST' });
+                if (!res.ok) { const err = await res.json(); alert(err.detail || '恢复失败'); return; }
+                const task = await res.json();
+                window.location.href = `/tasks/${task.task_id}`;
+            } catch (e) { alert('恢复失败: ' + e.message); }
+        },
+        async deleteCheckpoint(sessionId) {
+            if (!confirm('确定放弃此检查点？已完成的进度将丢失。')) return;
+            await fetch(`/api/checkpoints/${sessionId}`, { method: 'DELETE' });
+            await this.loadCheckpoints();
+        },
+        async deleteReport(benchmark, filename) {
+            if (!confirm(`确定删除报告 ${filename}？此操作不可撤销。`)) return;
+            const res = await fetch(`/api/reports/${benchmark}/${filename}`, { method: 'DELETE' });
+            if (!res.ok) { alert('删除失败: ' + (await res.json()).detail); return; }
+            this.reports = this.reports.filter(r => !(r.benchmark === benchmark && r.filename === filename));
+        },
+        formatTime(ts) { return ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : ''; },
+        formatReportDate(d) {
+            // d = "20260212" or "20260212_142012"
+            if (!d) return '';
+            const y = d.slice(0, 4), m = d.slice(4, 6), day = d.slice(6, 8);
+            if (d.length > 8) {
+                const hh = d.slice(9, 11), mm = d.slice(11, 13), ss = d.slice(13, 15);
+                return `${y}/${m}/${day} ${hh}:${mm}:${ss}`;
+            }
+            return `${y}/${m}/${day}`;
+        },
+        destroy() { if (this.pollTimer) clearInterval(this.pollTimer); }
+    };
+}
+</script>
+{% endblock %}

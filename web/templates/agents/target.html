@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}被测系统 - HolyEval{% endblock %}
+
+{% block content %}
+<div x-data="agentList()" x-init="init()">
+    <div class="mb-6">
+        <h1 class="text-xl font-semibold tracking-tight">被测系统</h1>
+        <p class="text-sm text-muted-foreground mt-1">已注册的 TargetAgent — 对话评测的目标系统，所有信息从代码中读取</p>
+    </div>
+
+    <div class="grid grid-cols-1 gap-5">
+        <template x-for="agent in agents" :key="agent.name">
+            <div class="agent-card" x-data="{ showDoc: false, showSchema: false, showExamples: false }">
+                <!-- Top accent bar -->
+                <div class="agent-card-accent" :style="'background-color:' + agent.color"></div>
+
+                <div class="p-6 pt-7">
+                    <!-- Header: icon + name + class + features -->
+                    <div class="flex items-start gap-4">
+                        <div class="agent-icon-wrapper" :style="'background-color:' + agent.color + '15; color:' + agent.color">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" :d="agent.icon"/>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2.5 mb-1">
+                                <h3 class="text-base font-semibold" x-text="agent.name"></h3>
+                                <span class="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded" x-text="agent.class_name"></span>
+                            </div>
+                            <p class="text-sm text-muted-foreground leading-relaxed" x-text="agent.short_desc"></p>
+                            <!-- Feature tags -->
+                            <div class="flex flex-wrap gap-1.5 mt-3">
+                                <template x-for="f in agent.features" :key="f">
+                                    <span class="agent-feature-tag" :style="'border-color:' + agent.color + '30; background-color:' + agent.color + '08'">
+                                        <span class="w-1.5 h-1.5 rounded-full" :style="'background-color:' + agent.color"></span>
+                                        <span x-text="f"></span>
+                                    </span>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Toggle buttons -->
+                    <div class="flex gap-2 mt-5 pt-4 border-t border-border">
+                        <button @click="showDoc = !showDoc" class="agent-detail-toggle" :class="showDoc && 'active'">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+                            功能说明
+                        </button>
+                        <button @click="showSchema = !showSchema" class="agent-detail-toggle" :class="showSchema && 'active'">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/></svg>
+                            配置 Schema
+                        </button>
+                        <button @click="showExamples = !showExamples" x-show="agent.config_examples.length > 0" class="agent-detail-toggle" :class="showExamples && 'active'">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776"/></svg>
+                            配置示例
+                        </button>
+                    </div>
+
+                    <!-- Doc -->
+                    <div x-show="showDoc" x-transition class="mt-4">
+                        <div class="agent-doc-section" x-text="agent.module_doc"></div>
+                    </div>
+
+                    <!-- Schema -->
+                    <div x-show="showSchema" x-transition class="mt-4">
+                        <div class="border border-border rounded-lg overflow-hidden">
+                            <table class="w-full text-sm" x-show="agent.config_schema.properties">
+                                <thead><tr class="bg-muted/50 border-b border-border">
+                                    <th class="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground">字段</th>
+                                    <th class="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground">类型</th>
+                                    <th class="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground">必填</th>
+                                    <th class="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground">描述</th>
+                                </tr></thead>
+                                <tbody class="divide-y divide-border">
+                                    <template x-for="[key, prop] in Object.entries(agent.config_schema.properties || {})" :key="key">
+                                        <tr class="table-row-hover">
+                                            <td class="px-3 py-2 font-mono text-xs font-medium" x-text="key"></td>
+                                            <td class="px-3 py-2 text-xs text-muted-foreground" x-text="prop.type || prop.anyOf?.map(a => a.type).join(' | ') || 'object'"></td>
+                                            <td class="px-3 py-2 text-xs">
+                                                <span x-show="(agent.config_schema.required || []).includes(key)" class="inline-block w-1.5 h-1.5 rounded-full bg-success"></span>
+                                            </td>
+                                            <td class="px-3 py-2 text-xs text-muted-foreground leading-relaxed" x-text="prop.description || prop.title || ''"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Examples -->
+                    <div x-show="showExamples" x-transition class="mt-4">
+                        <template x-for="(example, i) in agent.config_examples" :key="i">
+                            <pre class="code-block text-xs whitespace-pre-wrap mb-2" x-text="JSON.stringify(example, null, 2)"></pre>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <div x-show="agents.length === 0" class="text-center py-12 text-sm text-muted-foreground">暂无已注册的 TargetAgent</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function agentList() {
+    return {
+        agents: [],
+        async init() {
+            const res = await fetch('/api/agents/target');
+            this.agents = await res.json();
+        }
+    };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,71 @@
+[project]
+name = "holyeval"
+version = "0.1.0"
+description = "Theta Health 虚拟用户评测框架"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+    "holyeval-evaluator",
+    "holyeval-benchmark",
+    "holyeval-generator",
+    "holyeval-web",
+    "networkx>=3.6.1",
+    "nano-vectordb>=0.0.4.3",
+    "numpy>=2.4.3",
+    "tiktoken>=0.12.0",
+    "aioboto3>=15.5.0",
+    "python-dateutil>=2.9.0.post0",
+    "graspologic>=3.3.0",
+    "hnswlib>=0.8.0",
+    "neo4j>=6.1.0",
+    "pandas>=3.0.1",
+]
+
+# GPU 依赖（torch/sentence-transformers）已移除，
+# dyg_graphrag vendor 代码中均有 try/except ImportError 保护。
+# 如需本地推理: uv pip install torch sentence-transformers
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["evaluator", "benchmark", "generator", "web"]
+
+[tool.uv.sources]
+holyeval-evaluator = { workspace = true }
+holyeval-benchmark = { workspace = true }
+holyeval-generator = { workspace = true }
+holyeval-web = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "python-dotenv>=1.2.1",
+    "httpx>=0.25",
+]
+lint = [
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "api: 需要真实 API Key 的集成测试（deselect: -m 'not api'）",
+]
+filterwarnings = [
+    # Pydantic 模型名以 Test 开头导致的误收集
+    "ignore::pytest.PytestCollectionWarning",
+    # langchain + Python 3.14 兼容性
+    "ignore:.*Pydantic V1.*:UserWarning",
+    # asyncio.iscoroutinefunction Python 3.16 弃用
+    "ignore:.*iscoroutinefunction.*:DeprecationWarning",
+    # google genai Python 3.17 弃用
+    "ignore:.*_UnionGenericAlias.*:DeprecationWarning",
+    # aiohttp 继承弃用
+    "ignore:.*Inheritance class.*:DeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"

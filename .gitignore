@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+evaluator/tests/results/
+# Virtual environments
+.venv/
+venv/
+env/
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+# UV
+#uv.lock
+# OS
+.DS_Store
+Thumbs.db
+# Benchmark reports (runtime output)
+benchmark/report/**/*.json
+benchmark/report/.checkpoints/
+benchmark/report/.live/
+# Benchmark prepare data (runtime generated)
+benchmark/data/**/.data/
+benchmark/data/**/.dyg_work_dirs/
+benchmark/data/**/.hippo_work_dirs/
+logs/
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+# Environment
+.env
+.env.local
+# Claude Code
+.claude/settings.local.json
+web.log
+data_local
+.specstory/
+.cursorindexingignore
+.playwright-cli/
+/tmp
+.pikiclaw/*
+!.pikiclaw/skills/
+!.pikiclaw/skills/**

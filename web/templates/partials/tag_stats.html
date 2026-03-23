@@ -1,0 +1,44 @@
+<!-- Tag 分组统计卡片 — 需要父级 Alpine 提供 tagStats 对象 (key=tag, value={total, pass_count, fail_count, pass_rate, avg_score}) -->
+<div x-show="Object.keys(tagStats).length > 0" class="rounded-lg border border-border bg-card p-5 mb-5">
+    <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-medium">标签统计</h3>
+        <span class="text-xs text-muted-foreground" x-text="Object.keys(tagStats).length + ' 个标签'"></span>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+            <thead>
+                <tr class="border-b border-border text-muted-foreground">
+                    <th class="text-left py-2 pr-4 font-medium">标签</th>
+                    <th class="text-right py-2 px-3 font-medium">数量</th>
+                    <th class="text-right py-2 px-3 font-medium">Pass Rate</th>
+                    <th class="text-right py-2 px-3 font-medium">Avg Score</th>
+                    <th class="py-2 pl-4 font-medium w-32">分布</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="[tag, s] in Object.entries(tagStats).sort((a, b) => b[1].total - a[1].total)" :key="tag">
+                    <tr class="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                        <td class="py-2 pr-4">
+                            <button @click="selectedTag = selectedTag === tag ? '' : tag; page = 1"
+                                    class="px-2 py-0.5 rounded-full text-[11px] transition-colors cursor-pointer"
+                                    :class="selectedTag === tag ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-secondary/80'"
+                                    x-text="tag"></button>
+                        </td>
+                        <td class="text-right py-2 px-3 tabular-nums" x-text="s.total"></td>
+                        <td class="text-right py-2 px-3 tabular-nums">
+                            <span x-show="s.pass_count + s.fail_count > 0" x-text="(s.pass_rate * 100).toFixed(1) + '%'"></span>
+                            <span x-show="s.pass_count + s.fail_count === 0" class="text-muted-foreground">—</span>
+                        </td>
+                        <td class="text-right py-2 px-3 tabular-nums" x-text="s.avg_score.toFixed(2)"></td>
+                        <td class="py-2 pl-4">
+                            <div class="h-2 bg-secondary rounded-full overflow-hidden flex w-full">
+                                <div class="h-full bg-success" :style="`width: ${s.total > 0 ? (s.pass_count / s.total * 100) : 0}%`"></div>
+                                <div class="h-full bg-destructive" :style="`width: ${s.total > 0 ? (s.fail_count / s.total * 100) : 0}%`"></div>
+                            </div>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</div>

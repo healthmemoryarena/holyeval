@@ -1,0 +1,38 @@
+{
+  "id": "indicator_sleep_test_001",
+  "title": "睡眠数据查询准确性测试",
+  "description": "验证 AI 助手查询和分析用户睡眠数据的准确性",
+  "user": {
+    "type": "auto",
+    "goal": "查询我最近一个月的睡眠数据，了解深度睡眠和总睡眠时长的趋势",
+    "context": "关注睡眠质量的中年用户。行为风格：询问睡眠数据的具体数值、追问深度睡眠是否达标、询问睡眠质量的改善建议。",
+    "strict_inputs": [
+      "你好，我最近睡眠质量不太好，能帮我看看我这个月的睡眠数据吗？特别是深度睡眠够不够。"
+    ],
+    "max_turns": 6,
+    "finish_condition": "当 AI 助手展示了具体的睡眠数据（深度睡眠时长、总睡眠时长等数值）并给出了睡眠改善建议后结束对话"
+  },
+  "target": {
+    "type": "theta_api",
+    "email": "495186891@qq.com",
+    "code": "495186",
+    "agent": "App"
+  },
+  "eval": {
+    "evaluator": "indicator",
+    "indicators": [
+      "daily_stats_sleepAnalysis_Asleep(Deep)Sum",
+      "daily_stats_sleepAnalysis_Asleep(Total)Sum",
+      "daily_stats_sleepAnalysis_Asleep(Core)Sum"
+    ],
+    "start_time": "-30d",
+    "end_time": "now",
+    "limit": 200,
+    "threshold": 0.7
+  },
+  "tags": [
+    "indicator",
+    "sleep",
+    "accuracy"
+  ]
+}

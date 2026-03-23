@@ -1,0 +1,25 @@
+{
+  "description": "# History $ref Demo\n\n演示 `$ref` 引用共享 history 的功能。两个虚拟用户，各带预设对话上下文，验证基模在已知上下文下的问答能力。",
+  "target": [
+    {
+      "type": "llm_api",
+      "fields": {
+        "model": {"default": "gpt-4.1", "editable": true, "required": true}
+      }
+    }
+  ],
+  "params": {
+    "diabetic_user_history": [
+      {"role": "user", "content": "I'm a 45-year-old male diagnosed with type 2 diabetes 3 years ago. I take metformin 500mg twice daily."},
+      {"role": "assistant", "content": "Thank you for sharing that. I've noted your diabetes diagnosis and current metformin regimen. How can I help you today?"},
+      {"role": "user", "content": "My latest HbA1c was 7.8%, up from 7.2% three months ago."},
+      {"role": "assistant", "content": "I see your HbA1c has increased from 7.2% to 7.8%. That's a notable change. Have there been any changes in your diet, exercise, or medication adherence recently?"}
+    ],
+    "athlete_user_history": [
+      {"role": "user", "content": "I'm a 28-year-old female marathon runner. I train about 60 miles per week."},
+      {"role": "assistant", "content": "Got it — competitive distance runner with high weekly mileage. What would you like to discuss?"},
+      {"role": "user", "content": "I've been experiencing knee pain on the lateral side during long runs, started about 2 weeks ago."},
+      {"role": "assistant", "content": "Lateral knee pain in a high-mileage runner could point to several things, with IT band syndrome being common. Has the pain been getting worse, and does it appear at a consistent distance into your runs?"}
+    ]
+  }
+}

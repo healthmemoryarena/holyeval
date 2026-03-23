@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}{{ benchmark }}/{{ dataset }} - HolyEval{% endblock %}
+
+{% block content %}
+<div x-data="datasetDetail('{{ benchmark }}', '{{ dataset }}')" x-init="init()">
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-6">
+        <a href="/benchmarks" class="text-muted-foreground hover:text-foreground transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+        </a>
+        <div class="flex-1">
+            <h1 class="text-xl font-semibold tracking-tight" x-text="data.benchmark + ' / ' + data.dataset"></h1>
+            <div class="flex items-center gap-2 mt-1">
+                <span class="badge badge-secondary text-xs" x-text="data.case_count.toLocaleString() + ' 条用例'"></span>
+            </div>
+        </div>
+        <a :href="'/tasks?benchmark=' + data.benchmark + '&dataset=' + data.dataset" class="sh-btn sh-btn-primary gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/></svg>
+            跑这个数据集
+        </a>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div class="rounded-lg border border-border bg-card p-4">
+            <div class="text-xs text-muted-foreground mb-1">总用例数</div>
+            <div class="text-2xl font-semibold" x-text="data.case_count.toLocaleString()"></div>
+        </div>
+        <div class="rounded-lg border border-border bg-card p-4">
+            <div class="text-xs text-muted-foreground mb-1">标签种类</div>
+            <div class="text-2xl font-semibold" x-text="Object.keys(data.tag_distribution).length"></div>
+        </div>
+        <div class="rounded-lg border border-border bg-card p-4">
+            <div class="text-xs text-muted-foreground mb-1">评估器</div>
+            <div class="text-sm font-medium mt-1" x-text="evalTypes"></div>
+        </div>
+        <div class="rounded-lg border border-border bg-card p-4">
+            <div class="text-xs text-muted-foreground mb-1">预估费用</div>
+            <div class="text-2xl font-semibold" x-text="costEstimate"></div>
+            <div class="text-[11px] text-muted-foreground mt-0.5" x-show="costBreakdown" x-text="costBreakdown"></div>
+        </div>
+    </div>
+    <p class="text-[11px] text-muted-foreground -mt-4 mb-6" x-show="costEstimate !== '—'">
+        * 费用基于默认模型 (<span x-text="data.target?.model || '未知'"></span>) 和评估器 (<span x-text="data.evaluator || '未知'"></span>) 预估，实际费用可能有偏差
+    </p>
+
+    <!-- 描述（Markdown） -->
+    <div x-show="data.description" class="rounded-lg border border-border bg-card p-5 mb-5">
+        <div class="prose-readme text-sm leading-relaxed" x-ref="description"></div>
+    </div>
+
+    <!-- Tags distribution -->
+    <div x-show="Object.keys(data.tag_distribution).length > 0" class="rounded-lg border border-border bg-card p-5 mb-5">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-medium">标签分布</h3>
+            <span class="text-xs text-muted-foreground" x-text="Object.keys(data.tag_distribution).length + ' 个标签'"></span>
+        </div>
+        <div class="space-y-5">
+            <template x-for="group in tagGroups" :key="group.prefix">
+                <div>
+                    <div class="flex items-center gap-2 mb-2.5">
+                        <span class="w-2 h-2 rounded-full shrink-0" :class="group.dotColor"></span>
+                        <span class="text-xs font-medium" x-text="group.prefix"></span>
+                        <span class="text-[10px] text-muted-foreground" x-text="group.items.length + ' 个'"></span>
+                    </div>
+                    <div class="space-y-1">
+                        <template x-for="item in group.items" :key="item.tag">
+                            <div class="flex items-center gap-2.5 group/row">
+                                <div class="w-48 shrink-0 text-xs text-right text-muted-foreground truncate group-hover/row:text-foreground transition-colors" :title="item.tag" x-text="item.shortName"></div>
+                                <div class="flex-1 h-[18px] bg-secondary/50 rounded-sm overflow-hidden">
+                                    <div class="h-full rounded-sm" :class="group.barColor" :style="'width:' + Math.max(2, item.count / maxTagCount * 100) + '%'"></div>
+                                </div>
+                                <div class="w-7 shrink-0 text-[11px] text-muted-foreground text-right tabular-nums" x-text="item.count"></div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Case list -->
+    <div class="rounded-lg border border-border bg-card">
+        <div class="px-5 py-3 border-b border-border flex items-center justify-between gap-3">
+            <h3 class="text-sm font-medium shrink-0">用例列表</h3>
+            <div class="flex items-center gap-3 flex-1 justify-end">
+                <div class="relative max-w-xs w-full">
+                    <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+                    <input type="text" x-model.debounce.200ms="search" @input="page = 0" placeholder="搜索 ID 或内容..."
+                           class="sh-input pl-8 h-8 text-xs w-full">
+                </div>
+                <span class="text-xs text-muted-foreground shrink-0 tabular-nums" x-text="filteredSummaries.length + ' / ' + (data.case_summaries || []).length + ' 条'"></span>
+            </div>
+        </div>
+
+        <div class="divide-y divide-border">
+            <template x-for="c in pagedSummaries" :key="c.id">
+                <div>
+                    <div class="px-5 py-2.5 table-row-hover cursor-pointer flex items-center gap-3" @click="toggleExpand(c.id)">
+                        <svg class="w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform duration-150"
+                             :class="expandedId === c.id && 'rotate-90'"
+                             fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>
+                        </svg>
+                        <span class="text-xs font-mono font-medium text-foreground shrink-0" x-text="c.id"></span>
+                        <span class="text-xs text-muted-foreground truncate flex-1 min-w-0" x-text="c.title"></span>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <span x-show="c.user_type" class="badge badge-outline text-[10px]" x-text="'user: ' + c.user_type"></span>
+                            <span x-show="c.target_type" class="badge badge-outline text-[10px]" x-text="'target: ' + c.target_type"></span>
+                            <span x-show="c.evaluator" class="badge badge-secondary text-[10px]" x-text="'eval: ' + c.evaluator"></span>
+                        </div>
+                    </div>
+                    <div x-show="expandedId === c.id" x-transition.opacity class="border-t border-border bg-muted/30">
+                        <div x-show="caseLoading" class="px-8 py-4 text-center text-xs text-muted-foreground">
+                            <svg class="w-4 h-4 mx-auto mb-1 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            加载中...
+                        </div>
+                        <div x-show="!caseLoading && _caseCache[c.id]" class="px-5 py-3">
+                            <pre class="code-block text-xs whitespace-pre-wrap max-h-96 overflow-y-auto" x-text="JSON.stringify(_caseCache[c.id], null, 2)"></pre>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Pagination -->
+        <div x-show="totalPages > 1" class="px-5 py-3 border-t border-border flex items-center justify-between">
+            <button @click="page = Math.max(0, page - 1)" :disabled="page === 0"
+                    class="sh-btn sh-btn-ghost sh-btn-sm gap-1" :class="page === 0 && 'opacity-40'">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+                上一页
+            </button>
+            <span class="text-xs text-muted-foreground tabular-nums" x-text="(page + 1) + ' / ' + totalPages"></span>
+            <button @click="page = Math.min(totalPages - 1, page + 1)" :disabled="page >= totalPages - 1"
+                    class="sh-btn sh-btn-ghost sh-btn-sm gap-1" :class="page >= totalPages - 1 && 'opacity-40'">
+                下一页
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "partials/cost_estimate.html" %}
+<script src="/static/js/marked.min.js"></script>
+<script>
+function datasetDetail(benchmark, dataset) {
+    const PAGE_SIZE = 20;
+    return {
+        data: { benchmark, dataset, case_count: 0, cases_preview: [], case_summaries: [], tag_distribution: {}, description: '', target: null, evaluator: '' },
+        search: '',
+        page: 0,
+        expandedId: null,
+        caseLoading: false,
+        _caseCache: {},
+
+        // ---- 费用预估（使用 cost_estimate.html 两因子模型，数据来自 plugin _cost_meta）----
+        get costEstimate() {
+            const targetType = this.data.target?.type || '';
+            const model = this.data.target?.model || '';
+            const evaluator = this.data.evaluator;
+            if (!model && !evaluator) return '—';
+            return _estCostLabel(_estTotalCost(this.data.case_count, targetType, model, evaluator));
+        },
+        get costBreakdown() {
+            const targetType = this.data.target?.type || '';
+            const model = this.data.target?.model || '';
+            const evaluator = this.data.evaluator;
+            if (!model && !evaluator) return '';
+            const targetCost = _estTargetCallCost(targetType, model) * this.data.case_count;
+            const evalCost = _estEvalCaseCost(evaluator) * this.data.case_count;
+            const parts = [];
+            if (targetCost > 0) parts.push('Target ' + _estCostLabel(targetCost));
+            if (evalCost > 0) parts.push('Eval ' + _estCostLabel(evalCost));
+            return parts.join(' + ');
+        },
+
+        // ---- Tag groups ----
+        get tagGroups() {
+            const entries = Object.entries(this.data.tag_distribution);
+            const grouped = {};
+            for (const [tag, count] of entries) {
+                const i = tag.indexOf(':');
+                const prefix = i > -1 ? tag.substring(0, i) : '其他';
+                const shortName = i > -1 ? tag.substring(i + 1) : tag;
+                if (!grouped[prefix]) grouped[prefix] = [];
+                grouped[prefix].push({ tag, shortName, count });
+            }
+            const palette = [
+                { bar: 'bg-blue-500/25', dot: 'bg-blue-500' },
+                { bar: 'bg-amber-500/25', dot: 'bg-amber-500' },
+                { bar: 'bg-emerald-500/25', dot: 'bg-emerald-500' },
+                { bar: 'bg-purple-500/25', dot: 'bg-purple-500' },
+                { bar: 'bg-rose-500/25', dot: 'bg-rose-500' },
+            ];
+            return Object.entries(grouped)
+                .map(([prefix, items], i) => ({
+                    prefix,
+                    items: items.sort((a, b) => b.count - a.count),
+                    barColor: palette[i % palette.length].bar,
+                    dotColor: palette[i % palette.length].dot,
+                }))
+                .sort((a, b) => {
+                    const sumA = a.items.reduce((s, x) => s + x.count, 0);
+                    const sumB = b.items.reduce((s, x) => s + x.count, 0);
+                    return sumB - sumA;
+                });
+        },
+        get maxTagCount() { const vals = Object.values(this.data.tag_distribution); return vals.length > 0 ? Math.max(...vals) : 1; },
+        get evalTypes() {
+            const types = new Set((this.data.case_summaries || []).map(c => c.evaluator).filter(Boolean));
+            return types.size > 0 ? [...types].join(', ') : '-';
+        },
+
+        // ---- Pagination + search ----
+        get filteredSummaries() {
+            const q = this.search.trim().toLowerCase();
+            if (!q) return this.data.case_summaries || [];
+            return (this.data.case_summaries || []).filter(c =>
+                c.id.toLowerCase().includes(q) || (c.title || '').toLowerCase().includes(q)
+            );
+        },
+        get totalPages() { return Math.max(1, Math.ceil(this.filteredSummaries.length / PAGE_SIZE)); },
+        get pagedSummaries() {
+            const start = this.page * PAGE_SIZE;
+            return this.filteredSummaries.slice(start, start + PAGE_SIZE);
+        },
+
+        async toggleExpand(caseId) {
+            if (this.expandedId === caseId) {
+                this.expandedId = null;
+                return;
+            }
+            this.expandedId = caseId;
+            if (this._caseCache[caseId]) return;
+            this.caseLoading = true;
+            try {
+                const res = await fetch(`/api/benchmarks/${benchmark}/${dataset}/cases/${caseId}`);
+                if (res.ok) this._caseCache[caseId] = await res.json();
+            } finally { this.caseLoading = false; }
+        },
+
+        async init() {
+            const [detailRes, evalRes, targetRes] = await Promise.all([
+                fetch(`/api/benchmarks/${benchmark}/${dataset}`),
+                fetch('/api/agents/eval'),
+                fetch('/api/agents/target'),
+            ]);
+            if (detailRes.ok) this.data = await detailRes.json();
+            _initCostMeta(await evalRes.json(), await targetRes.json());
+            if (this.data.description && this.$refs.description) {
+                this.$refs.description.innerHTML = marked.parse(this.data.description);
+            }
+        }
+    };
+}
+</script>
+{% endblock %}
