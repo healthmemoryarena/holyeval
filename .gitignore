@@ -50,3 +50,46 @@ data_local
 .pikiclaw/*
 !.pikiclaw/skills/
 !.pikiclaw/skills/**
+
+# ============================================================
+# Internal files excluded from opensource (auto-generated)
+# These are tracked in main but not in opensource.
+# This section prevents them from appearing as untracked.
+# ============================================================
+hma-web/
+scripts/
+tools/
+data_local/
+.opensource-exclude
+evaluator/plugin/target_agent/theta_api_target_agent.py
+evaluator/plugin/target_agent/theta_smart_api_target_agent.py
+evaluator/plugin/target_agent/theta_miroflow_target_agent.py
+evaluator/plugin/target_agent/hippo_rag_api_target_agent.py
+evaluator/plugin/target_agent/dyg_rag_api_target_agent.py
+evaluator/plugin/eval_agent/indicator_eval_agent.py
+evaluator/plugin/eval_agent/indicator_recall_eval_agent.py
+evaluator/plugin/eval_agent/kg_qa_eval_agent.py
+evaluator/utils/theta_config.py
+evaluator/utils/remote_config.py
+evaluator/vendor/dyg_graphrag/
+benchmark/data/thetagen/
+benchmark/data/thetagen_sampling/
+benchmark/data/thetagen_test_1/
+benchmark/data/extraction/
+benchmark/data/aq_redteam/
+benchmark/multi_agent_runner.py
+benchmark/pairwise_eval.py
+benchmark/semantic_reeval.py
+benchmark/llm_reeval_all.py
+benchmark/llm_reeval_fails.py
+benchmark/kg_qa_ranking_table.py
+benchmark/rerun_miroflow_3941_3948.sh
+benchmark/report/
+generator/theta_benchmark/
+generator/thetagen/
+generator/thetagendata/
+generator/aq_redteam/
+.gitlab-ci.yml
+.claude/
+.agents/
+.pikiclaw/
