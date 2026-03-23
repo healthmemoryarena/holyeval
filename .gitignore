@@ -86,11 +86,14 @@ generator/theta_benchmark/
 generator/thetagen/
 generator/thetagendata/
 generator/aq_redteam/
+CLAUDE.opensource.md
+README.opensource.md
+USAGE.md
+.pikiclaw/skills/publish-opensource/
+.claude/settings.json
+.claude/settings.local.json
 .gitlab-ci.yml
 .idea/
-.pikiclaw/
-.agents/
-.claude/
 .env
 __pycache__/
 .pytest_cache/
