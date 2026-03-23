@@ -6,6 +6,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 HolyEval is a virtual user evaluation framework for AI medical assistants (Theta Health). It synthesizes virtual users to have multi-turn conversations with the system under test, then automatically evaluates performance via pluggable evaluators.
 
+## 分支策略与开源发布
+
+本仓库有两个长期分支：
+
+| 分支 | 用途 | 包含内部代码 |
+|------|------|------------|
+| `main` | 开发主分支，包含全部代码（框架 + 内部插件 + 业务应用） | ✅ |
+| `opensource` | 开源发布分支，仅包含框架代码，内部内容已过滤 | ❌ |
+
+**关键规则**：
+
+1. **禁止直接在 `main` 和 `opensource` 之间创建 MR/PR** — `opensource` 分支由 `/publish-opensource` skill 自动生成，不接受手动合并
+2. **所有代码改动提交到 `main`**，然后通过 `/publish-opensource` 同步到 `opensource`
+3. `/publish-opensource` 使用 `.opensource-exclude` 排除清单过滤内部文件，通过 rsync 复制到 `opensource` 分支的 git worktree，提交时携带具体变更描述
+4. GitHub 开源仓库跟踪 `opensource` 分支
+
+**发布流程**：
+```bash
+# 在 main 分支上完成开发、提交
+# 然后执行 skill：
+/publish-opensource              # 过滤 → 分析变更 → 提交 → 推送
+/publish-opensource --dry-run    # 仅预览变更，不推送
+```
+
+**排除清单**（`.opensource-exclude`）包含：内部 target/eval 插件、Theta 专属 benchmark 数据、内部 runner 脚本、generator、hma-web、scripts、tools 等。新增内部文件时需同步更新此清单。
+
 ## Commands
 
 ```bash

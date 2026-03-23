@@ -86,9 +86,11 @@ generator/theta_benchmark/
 generator/thetagen/
 generator/thetagendata/
 generator/aq_redteam/
-.pikiclaw/skills/publish-opensource/
 .gitlab-ci.yml
 .idea/
+.pikiclaw/
+.agents/
+.claude/
 .env
 __pycache__/
 .pytest_cache/
