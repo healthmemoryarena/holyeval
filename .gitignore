@@ -51,6 +51,7 @@ data_local
 !.pikiclaw/skills/
 !.pikiclaw/skills/**
 
+
 # === OPENSOURCE-EXCLUDE START ===
 # Auto-generated from .opensource-exclude — do not edit manually
 hma-web/
@@ -86,11 +87,9 @@ generator/theta_benchmark/
 generator/thetagen/
 generator/thetagendata/
 generator/aq_redteam/
+.pikiclaw/skills/publish-opensource/
 .gitlab-ci.yml
 .idea/
-.pikiclaw/
-.agents/
-.claude/
 .env
 __pycache__/
 .pytest_cache/
