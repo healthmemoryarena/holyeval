@@ -1,4 +1,4 @@
-"""Agent 元信息 API"""
+"""Agent metadata API"""
 
 from fastapi import APIRouter
 

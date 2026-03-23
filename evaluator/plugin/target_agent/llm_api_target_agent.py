@@ -1,17 +1,18 @@
 """
-LlmApiTargetAgent — 统一调用大模型 API
+LlmApiTargetAgent — Unified LLM API caller
 
-注册名称: "llm_api"
+Registered name: "llm_api"
 
-基于 evaluator/utils/llm.py 的 do_execute 接口，支持所有已接入的模型提供商
-（OpenAI、Google Gemini 等），自动维护多轮对话历史，兼容 TestCase.history 字段。
+Based on evaluator/utils/llm.py do_execute interface, supports all integrated model providers
+(OpenAI, Google Gemini, etc.), automatically maintains multi-turn conversation history,
+compatible with TestCase.history field.
 
-用户级参数（LlmApiTargetInfo）：
-    model: 模型名称（必填，如 gpt-5.2 / gemini-3-pro）
-    system_prompt: 系统提示词（可选）
+User-level params (LlmApiTargetInfo):
+    model: Model name (required, e.g. gpt-5.2 / gemini-3-pro)
+    system_prompt: System prompt (optional)
 
-基础设施参数（从环境变量读取，由 do_execute / init_chat_model 管理）：
-    OPENAI_API_KEY / GOOGLE_API_KEY 等
+Infrastructure params (read from env vars, managed by do_execute / init_chat_model):
+    OPENAI_API_KEY / GOOGLE_API_KEY etc.
 """
 
 import logging
@@ -33,34 +34,34 @@ from evaluator.utils.llm import BasicMessage, do_execute
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SYSTEM_PROMPT = "你是一个AI助手，请根据用户的问题提供有用的回答。"
+_DEFAULT_SYSTEM_PROMPT = "You are an AI assistant. Please provide helpful answers based on the user's questions."
 
-# benchmark/data/ 目录（从 evaluator/plugin/target_agent/ 向上 3 级 → 项目根 → benchmark/data/）
+# benchmark/data/ directory (3 levels up from evaluator/plugin/target_agent/ -> project root -> benchmark/data/)
 _BENCHMARK_DATA_DIR = Path(__file__).resolve().parents[3] / "benchmark" / "data"
 
 
 def _load_tool_group(tool_group: str, tool_context: dict[str, Any]) -> tuple[list[BaseTool], type | None]:
-    """从 benchmark/data/ 下加载工具组模块
+    """Load tool group module from benchmark/data/
 
-    tool_group 格式: "{benchmark}/{tool_name}" 如 "thetagen/retrieve"
-    解析为: benchmark/data/{benchmark}/tools/{tool_name}.py
+    tool_group format: "{benchmark}/{tool_name}" e.g. "thetagen/retrieve"
+    Resolves to: benchmark/data/{benchmark}/tools/{tool_name}.py
 
-    模块须导出 get_tools(**tool_context) -> list[BaseTool]
-    可选导出 ToolContext 类（用于 langgraph context_schema，消除 Pydantic 序列化警告）
+    Module must export get_tools(**tool_context) -> list[BaseTool]
+    Optionally exports ToolContext class (for langgraph context_schema, eliminates Pydantic serialization warnings)
 
     Returns:
-        (tools, context_class) — context_class 为 None 时 fallback 到 dict
+        (tools, context_class) — context_class is None when falling back to dict
     """
     import importlib.util
 
     parts = tool_group.split("/")
     if len(parts) != 2:
-        raise ValueError(f"tool_group 格式应为 '{{benchmark}}/{{tool_name}}'，收到: {tool_group!r}")
+        raise ValueError(f"tool_group format should be '{{benchmark}}/{{tool_name}}', got: {tool_group!r}")
 
     benchmark, tool_name = parts
     file_path = _BENCHMARK_DATA_DIR / benchmark / "tools" / f"{tool_name}.py"
     if not file_path.exists():
-        raise FileNotFoundError(f"工具组文件不存在: {file_path}")
+        raise FileNotFoundError(f"Tool group file not found: {file_path}")
 
     spec = importlib.util.spec_from_file_location(f"tool_group.{benchmark}.{tool_name}", file_path)
     module = importlib.util.module_from_spec(spec)
@@ -68,30 +69,30 @@ def _load_tool_group(tool_group: str, tool_context: dict[str, Any]) -> tuple[lis
 
     get_tools_fn = getattr(module, "get_tools", None)
     if get_tools_fn is None:
-        raise AttributeError(f"工具组 {tool_group!r} 未导出 get_tools() 函数")
+        raise AttributeError(f"Tool group {tool_group!r} does not export get_tools() function")
 
-    # 提取 ToolContext 类（可选，用于 context_schema）
+    # Extract ToolContext class (optional, for context_schema)
     context_class = getattr(module, "ToolContext", None)
 
     return get_tools_fn(**tool_context), context_class
 
 
 class LlmApiTargetInfo(BaseModel):
-    """LLM API 被测目标配置 — 通过 do_execute 统一调用大模型"""
+    """LLM API target config — unified LLM calling via do_execute"""
 
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
             "examples": [
-                {"_comment": "最小配置，仅需 model", "type": "llm_api", "model": "gpt-5.4"},
+                {"_comment": "Minimal config, only model required", "type": "llm_api", "model": "gpt-5.4"},
                 {
-                    "_comment": "指定系统提示词",
+                    "_comment": "With custom system prompt",
                     "type": "llm_api",
                     "model": "gemini-3-pro-preview",
-                    "system_prompt": "你是一个专业的健康助手。",
+                    "system_prompt": "You are a professional health assistant.",
                 },
                 {
-                    "_comment": "带工具组",
+                    "_comment": "With tool group",
                     "type": "llm_api",
                     "model": "gpt-5.4",
                     "tool_group": "thetagen/retrieve",
@@ -100,7 +101,7 @@ class LlmApiTargetInfo(BaseModel):
             ],
         },
     )
-    type: Literal["llm_api"] = Field(description="目标类型")
+    type: Literal["llm_api"] = Field(description="Target type")
     model: Literal[
         "gpt-5.4",
         "gpt-5.2",
@@ -113,22 +114,22 @@ class LlmApiTargetInfo(BaseModel):
         "anthropic/claude-sonnet-4.6",
         "minimax/minimax-m2.5",
         "z-ai/glm-5",
-    ] = Field(description="模型名称")
-    system_prompt: Optional[str] = Field(None, description="系统提示词（不填时使用默认提示）")
+    ] = Field(description="Model name")
+    system_prompt: Optional[str] = Field(None, description="System prompt (uses default prompt if not specified)")
     tool_group: Optional[str] = Field(
         None,
-        description="工具组路径（格式: '{benchmark}/tools/{name}'，如 'thetagen/retrieve'，对应 benchmark/data/ 下的 .py 文件）",
+        description="Tool group path (format: '{benchmark}/tools/{name}', e.g. 'thetagen/retrieve', corresponds to .py files under benchmark/data/)",
     )
     tool_context: Optional[Dict[str, Any]] = Field(
-        None, description="工具组运行时上下文（传递给 get_tools()，如 user_email 等）"
+        None, description="Tool group runtime context (passed to get_tools(), e.g. user_email etc.)"
     )
     thinking_level: Optional[str] = Field(
-        None, description='思考级别 — OpenAI: "low"/"medium"/"high"; Gemini: budget token 数（如 "8192"）'
+        None, description='Thinking level — OpenAI: "low"/"medium"/"high"; Gemini: budget token count (e.g. "8192")'
     )
 
 
 class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApiTargetInfo):
-    """统一调用大模型 API"""
+    """Unified LLM API caller"""
 
     _display_meta = {
         "icon": (
@@ -137,11 +138,11 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
             " 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z"
         ),
         "color": "#6366f1",
-        "features": ["OpenAI", "Gemini", "多模型支持"],
+        "features": ["OpenAI", "Gemini", "Multi-model"],
     }
     _cost_meta = {
-        "est_input_tokens": 200,  # 预估单次调用输入 token（含 system prompt + 用户消息）
-        "est_output_tokens": 600,  # 预估单次调用输出 token
+        "est_input_tokens": 200,  # Estimated input tokens per call (system prompt + user message)
+        "est_output_tokens": 600,  # Estimated output tokens per call
     }
 
     def __init__(self, target_config: LlmApiTargetInfo, history: list[BaseMessage] | None = None):
@@ -149,7 +150,7 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
         self.config: LlmApiTargetInfo = target_config
         self.model: str = target_config.model
 
-        # 将 history (List[BaseMessage]) 转换为 BasicMessage 列表，供 do_execute 使用
+        # Convert history (List[BaseMessage]) to BasicMessage list for do_execute
         self._conversation: list[BasicMessage] = []
         for msg in self.history:
             if isinstance(msg, HumanMessage):
@@ -157,13 +158,13 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
             elif isinstance(msg, AIMessage):
                 self._conversation.append(BasicMessage(role="assistant", content=msg.content))
 
-        # 加载工具组（可选）
+        # Load tool group (optional)
         self._tools: list[BaseTool] | None = None
-        self._tool_context_typed: Any = None  # 类型化的 tool_context（消除 Pydantic 序列化警告）
+        self._tool_context_typed: Any = None  # Typed tool_context (eliminates Pydantic serialization warnings)
         self._tool_context_schema: type | None = None
         if target_config.tool_group:
             self._tools, context_class = _load_tool_group(target_config.tool_group, target_config.tool_context or {})
-            # 将 dict 转为工具模块声明的 ToolContext 类型（如有）
+            # Convert dict to ToolContext type declared by the tool module (if available)
             if context_class is not None and target_config.tool_context:
                 self._tool_context_typed = context_class(**target_config.tool_context)
                 self._tool_context_schema = context_class
@@ -176,30 +177,30 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
                 len(self._tools),
             )
 
-        # 成本统计（使用 langchain UsageMetadata）
+        # Cost tracking (using langchain UsageMetadata)
         self._cost = UsageMetadata(input_tokens=0, output_tokens=0, total_tokens=0)
 
     @property
     def cost(self) -> UsageMetadata:
-        """获取累计成本统计"""
+        """Get cumulative cost statistics"""
         return self._cost
 
     def _accumulate_cost(self, usage: dict[str, UsageMetadata] | None) -> None:
-        """累加 LLM 调用成本"""
+        """Accumulate LLM call cost"""
         from evaluator.utils.llm import accumulate_usage
 
         self._cost = accumulate_usage(self._cost, usage)
 
     async def _generate_next_reaction(self, test_action: Optional[TestAgentAction]) -> TargetAgentReaction:
-        """将用户输入通过 do_execute 发送给大模型，返回模型响应"""
+        """Send user input to LLM via do_execute and return model response"""
         if test_action is None:
-            # 首轮无用户输入，返回欢迎语
+            # First turn with no user input, return welcome message
             return TargetAgentReaction(
                 type="message",
-                message_list=[{"content": "你好，有什么可以帮你的？"}],
+                message_list=[{"content": "Hello, how can I help you?"}],
             )
 
-        # 提取用户输入
+        # Extract user input
         user_text = self._extract_user_input(test_action)
         system_prompt = self.config.system_prompt or _DEFAULT_SYSTEM_PROMPT
 
@@ -209,7 +210,7 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
             len(self._conversation),
         )
 
-        # 调用 do_execute：history_messages 为之前的对话，input 为当前用户输入
+        # Call do_execute: history_messages is prior conversation, input is current user input
         result = await do_execute(
             model=self.config.model,
             system_prompt=system_prompt,
@@ -223,10 +224,10 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
 
         assistant_content = result.content
 
-        # 累加成本
+        # Accumulate cost
         self._accumulate_cost(result.usage)
 
-        # 追加本轮对话到历史
+        # Append this turn's conversation to history
         self._conversation.append(BasicMessage(role="user", content=user_text))
         self._conversation.append(BasicMessage(role="assistant", content=assistant_content))
 
@@ -235,7 +236,7 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
             len(assistant_content),
         )
 
-        # 序列化 tool_calls（ToolCallRecord → dict）
+        # Serialize tool_calls (ToolCallRecord -> dict)
         tc_dicts = [tc.model_dump() for tc in result.tool_calls] if result.tool_calls else None
 
         return TargetAgentReaction(
@@ -246,12 +247,12 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
         )
 
     def get_session_info(self) -> SessionInfo:
-        """当 system_prompt 注入了用户健康档案时，通知 EvalAgent 可按"有用户数据"规则评测"""
+        """When system_prompt contains user health profile, notify EvalAgent to evaluate with 'has user data' rules"""
         has_user_data = bool(self.config.system_prompt and len(self.config.system_prompt) > 200)
         return SessionInfo(has_user_data=has_user_data)
 
     def _extract_user_input(self, test_action: TestAgentAction) -> str:
-        """从 TestAgentAction 提取用户输入"""
+        """Extract user input from TestAgentAction"""
         if test_action.type == "semantic":
             return test_action.semantic_content or ""
         elif test_action.type == "message":

@@ -1,10 +1,10 @@
 """
-ManualTestAgent — 手动模式虚拟用户（脚本驱动）
+ManualTestAgent — Manual-mode virtual user (script-driven)
 
-按顺序发送 strict_inputs 中的预设输入，用完即结束。
-零 LLM 调用、完全确定性、零成本。
+Sends preset inputs from strict_inputs in order, finishes when exhausted.
+Zero LLM calls, fully deterministic, zero cost.
 
-适用场景：数据提取验证、预设问答、回归测试等单轮/固定轮次测试。
+Use cases: data extraction validation, preset Q&A, regression tests, and other single/fixed-turn tests.
 """
 
 import logging
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class ManualTestAgent(AbstractTestAgent, name="manual"):
-    """手动模式虚拟用户 — 按序发送 strict_inputs，用完自动结束"""
+    """Manual-mode virtual user — sends strict_inputs in order, auto-finishes when exhausted"""
 
     _config_model = "ManualUserInfo"
 
@@ -34,19 +34,19 @@ class ManualTestAgent(AbstractTestAgent, name="manual"):
             " 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
         ),
         "color": "#64748b",
-        "features": ["零 LLM", "脚本驱动", "确定性执行"],
+        "features": ["Zero LLM", "Script-driven", "Deterministic"],
     }
 
     def __init__(self, user_info: ManualUserInfo, **kwargs):
         super().__init__(user_info, **kwargs)
-        # 手动模式轮次由 strict_inputs 数量决定，忽略 UserInfo.max_turns
+        # Manual mode turn count determined by strict_inputs length, ignores UserInfo.max_turns
         self.max_turns = len(self.user_info.strict_inputs) + 1
 
     async def _generate_next_reaction(
         self, target_reaction: Optional[TargetAgentReaction]
     ) -> TestAgentReaction:
-        """按序消费 strict_inputs，用完则结束对话"""
-        idx = self.current_turn - 1  # current_turn 已在 do_generate 中 +1
+        """Consume strict_inputs in order, end conversation when exhausted"""
+        idx = self.current_turn - 1  # current_turn already incremented in do_generate
 
         if idx < len(self.user_info.strict_inputs):
             text = self.user_info.strict_inputs[idx]
@@ -62,7 +62,7 @@ class ManualTestAgent(AbstractTestAgent, name="manual"):
                 is_finished=False,
             )
 
-        # strict_inputs 全部消费完 → 结束
+        # All strict_inputs consumed -> finish
         logger.info(
             "[ManualTestAgent] Turn %d — all %d strict_inputs consumed, finishing",
             self.current_turn,

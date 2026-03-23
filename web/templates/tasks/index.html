@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}执行评测 - HolyEval{% endblock %}
+{% block title %}Run Eval - HolyEval{% endblock %}
 
 {% block content %}
 <div x-data="taskManager()" x-init="init()">
     <div class="mb-6">
-        <h1 class="text-xl font-semibold tracking-tight">执行评测</h1>
-        <p class="text-sm text-muted-foreground mt-1">选择 benchmark 数据集，配置执行参数，发起评测任务</p>
+        <h1 class="text-xl font-semibold tracking-tight">Run Evaluation</h1>
+        <p class="text-sm text-muted-foreground mt-1">Select benchmark dataset, configure parameters, and start evaluation</p>
     </div>
 
-    <!-- ====== 检查点恢复提示 ====== -->
+    <!-- ====== Checkpoint recovery ====== -->
     <template x-if="checkpoints.length > 0">
         <div class="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4 mb-5">
             <div class="flex items-start gap-3">
@@ -16,22 +16,22 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
                 </svg>
                 <div class="flex-1">
-                    <h3 class="text-sm font-medium text-amber-800 dark:text-amber-200">发现未完成的评测任务</h3>
+                    <h3 class="text-sm font-medium text-amber-800 dark:text-amber-200">Unfinished evaluation tasks found</h3>
                     <div class="mt-2 space-y-2">
                         <template x-for="cp in checkpoints" :key="cp.session_id">
                             <div class="flex items-center gap-3 text-sm">
                                 <span class="font-medium" x-text="cp.benchmark + '/' + cp.dataset"></span>
-                                <span class="text-muted-foreground tabular-nums" x-text="'已完成 ' + cp.completed_count + '/' + cp.case_count"></span>
+                                <span class="text-muted-foreground tabular-nums" x-text="cp.completed_count + '/' + cp.case_count + ' completed'"></span>
                                 <span class="text-xs text-muted-foreground" x-text="cp.target_type"></span>
                                 <div class="ml-auto flex items-center gap-2">
                                     <button @click="resumeCheckpoint(cp.session_id)"
                                             class="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 transition-colors">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/></svg>
-                                        继续执行
+                                        Resume
                                     </button>
                                     <button @click="deleteCheckpoint(cp.session_id)"
                                             class="inline-flex items-center rounded-md px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                                        放弃
+                                        Discard
                                     </button>
                                 </div>
                             </div>
@@ -46,7 +46,7 @@
     <div class="rounded-lg border border-border bg-card mb-5">
         <div class="px-5 py-3 border-b border-border flex items-center gap-2">
             <span class="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">1</span>
-            <h2 class="text-sm font-medium">选择数据集</h2>
+            <h2 class="text-sm font-medium">Select Dataset</h2>
         </div>
         <div class="p-5">
             <div class="flex flex-wrap items-end gap-4">
@@ -55,7 +55,7 @@
                     <label class="text-xs font-medium text-muted-foreground">Benchmark</label>
                     <div class="relative">
                         <button type="button" @click="open = !open" class="sh-select-trigger" :data-state="open ? 'open' : 'closed'">
-                            <span :class="!form.benchmark && 'placeholder'" x-text="form.benchmark || '选择评测类型'"></span>
+                            <span :class="!form.benchmark && 'placeholder'" x-text="form.benchmark || 'Select benchmark'"></span>
                             <svg class="w-4 h-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                         </button>
                         <div x-show="open" x-transition.opacity class="sh-select-content">
@@ -74,7 +74,7 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
                                         </svg>
                                     </template>
-                                    <span class="ml-auto text-xs text-muted-foreground" x-text="b.datasets.length + ' 个数据集'"></span>
+                                    <span class="ml-auto text-xs text-muted-foreground" x-text="b.datasets.length + ' datasets'"></span>
                                 </div>
                             </template>
                         </div>
@@ -86,7 +86,7 @@
                     <label class="text-xs font-medium text-muted-foreground">Dataset</label>
                     <div class="relative">
                         <button type="button" @click="open = !open" class="sh-select-trigger" :data-state="open ? 'open' : 'closed'" :disabled="!form.benchmark">
-                            <span :class="!form.dataset && 'placeholder'" x-text="form.dataset ? (form.dataset + ' (' + (datasets.find(d=>d.name===form.dataset)?.case_count||0) + ' 条)') : '选择数据集'"></span>
+                            <span :class="!form.dataset && 'placeholder'" x-text="form.dataset ? (form.dataset + ' (' + (datasets.find(d=>d.name===form.dataset)?.case_count||0) + ' cases)') : 'Select dataset'"></span>
                             <svg class="w-4 h-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                         </button>
                         <div x-show="open" x-transition.opacity class="sh-select-content w-max min-w-full">
@@ -97,7 +97,7 @@
                                     <span class="ml-auto text-xs text-muted-foreground tabular-nums" x-text="datasetHint(d)"></span>
                                 </div>
                             </template>
-                            <div x-show="datasets.length === 0" class="sh-select-item text-muted-foreground">请先选择 Benchmark</div>
+                            <div x-show="datasets.length === 0" class="sh-select-item text-muted-foreground">Select a benchmark first</div>
                         </div>
                     </div>
                 </div>
@@ -105,7 +105,7 @@
         </div>
     </div>
 
-    <!-- ====== 准备脚本状态提示 ====== -->
+    <!-- ====== Prepare script status ====== -->
     <template x-if="prepareStatus === 'running'">
         <div class="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-4 mb-5">
             <div class="flex items-center gap-3">
@@ -114,8 +114,8 @@
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 <div>
-                    <h3 class="text-sm font-medium text-blue-800 dark:text-blue-200">数据准备中...</h3>
-                    <p class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">正在运行数据准备脚本，完成后即可执行评测</p>
+                    <h3 class="text-sm font-medium text-blue-800 dark:text-blue-200">Preparing data...</h3>
+                    <p class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">Running data preparation script, evaluation available after completion</p>
                 </div>
             </div>
         </div>
@@ -127,8 +127,8 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
                 </svg>
                 <div>
-                    <h3 class="text-sm font-medium text-red-800 dark:text-red-200">数据准备失败</h3>
-                    <p class="text-xs text-red-600 dark:text-red-400 mt-0.5 font-mono whitespace-pre-wrap max-h-24 overflow-auto" x-text="prepareError || '未知错误'"></p>
+                    <h3 class="text-sm font-medium text-red-800 dark:text-red-200">Data preparation failed</h3>
+                    <p class="text-xs text-red-600 dark:text-red-400 mt-0.5 font-mono whitespace-pre-wrap max-h-24 overflow-auto" x-text="prepareError || 'Unknown error'"></p>
                 </div>
             </div>
         </div>
@@ -138,19 +138,19 @@
     <div x-show="form.dataset" x-transition class="rounded-lg border border-border bg-card mb-5">
         <div class="px-5 py-3 border-b border-border flex items-center gap-2">
             <span class="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">2</span>
-            <h2 class="text-sm font-medium">执行配置</h2>
-            <span class="text-xs text-muted-foreground" x-text="'共 ' + caseSummaries.length.toLocaleString() + ' 条用例'"></span>
+            <h2 class="text-sm font-medium">Run Config</h2>
+            <span class="text-xs text-muted-foreground" x-text="caseSummaries.length.toLocaleString() + ' cases'"></span>
         </div>
         <div class="p-5">
             <form @submit.prevent="createTask()">
                 <!-- Target config -->
                 <div class="mb-4">
-                    <label class="text-xs font-medium text-muted-foreground mb-2 block">被测系统</label>
+                    <label class="text-xs font-medium text-muted-foreground mb-2 block">Target System</label>
 
-                    <!-- schema-driven 表单（field-level 编辑权限） -->
+                    <!-- schema-driven form (field-level editability) -->
                     <div>
                         <div class="grid grid-cols-12 gap-x-4 gap-y-3 items-end">
-                            <!-- Type selector — 固定 1/3 宽；metadata 指定 type 时锁定 -->
+                            <!-- Type selector — fixed 1/3 width; locked when metadata specifies type -->
                             <div class="col-span-12 sm:col-span-4 flex flex-col gap-1.5" x-data="{ open: false }" @click.away="open = false">
                                 <label class="text-[11px] text-muted-foreground">Type <span class="text-red-500">*</span></label>
                                 <div class="relative">
@@ -163,7 +163,7 @@
                                     <template x-if="!targetTypeLocked">
                                         <div>
                                             <button type="button" @click="open = !open" class="sh-select-trigger" :data-state="open ? 'open' : 'closed'">
-                                                <span :class="!form.target_type && 'placeholder'" x-text="form.target_type || '选择类型'"></span>
+                                                <span :class="!form.target_type && 'placeholder'" x-text="form.target_type || 'Select type'"></span>
                                                 <svg class="w-4 h-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                                             </button>
                                             <div x-show="open" x-transition.opacity class="sh-select-content w-max min-w-full">
@@ -180,7 +180,7 @@
                                 </div>
                             </div>
 
-                            <!-- Dynamic fields — field-level 编辑权限 -->
+                            <!-- Dynamic fields — field-level editability -->
                             <template x-for="field in targetFields" :key="field.name">
                                 <div class="flex flex-col gap-1.5"
                                      :class="fieldSpanClass(field)"
@@ -191,9 +191,9 @@
                                         <template x-if="!field.editable">
                                             <svg class="w-3 h-3 text-muted-foreground/50" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
                                         </template>
-                                        <template x-if="!field.required && field.editable"><span class="text-muted-foreground/60">（选填）</span></template>
+                                        <template x-if="!field.required && field.editable"><span class="text-muted-foreground/60">(optional)</span></template>
                                     </label>
-                                    <!-- 非 editable → 只读展示 -->
+                                    <!-- Non-editable → read-only display -->
                                     <template x-if="!field.editable">
                                         <div class="sh-input cursor-default opacity-60 bg-muted/40">
                                             <span class="min-w-0 truncate" x-text="targetValues[field.name] || field.default || '—'"></span>
@@ -204,7 +204,7 @@
                                         <div class="relative">
                                             <button type="button" @click="open = !open" class="sh-select-trigger" :data-state="open ? 'open' : 'closed'">
                                                 <span :class="!targetValues[field.name] && 'placeholder'"
-                                                      x-text="targetValues[field.name] || ('选择' + field.title)"></span>
+                                                      x-text="targetValues[field.name] || ('Select ' + field.title)"></span>
                                                 <svg class="w-4 h-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                                             </button>
                                             <div x-show="open" x-transition.opacity class="sh-select-content">
@@ -236,15 +236,15 @@
 
                 <!-- Scope selection -->
                 <div class="mb-4">
-                    <label class="text-xs font-medium text-muted-foreground mb-2 block">执行范围</label>
+                    <label class="text-xs font-medium text-muted-foreground mb-2 block">Scope</label>
                     <div class="flex gap-2">
                         <button type="button" @click="form.scope = 'all'; selectedIds = []" class="sh-btn sh-btn-sm"
                                 :class="form.scope === 'all' ? 'sh-btn-primary' : 'sh-btn-secondary'">
-                            全部用例
+                            All Cases
                         </button>
                         <button type="button" @click="form.scope = 'ids'" class="sh-btn sh-btn-sm"
                                 :class="form.scope === 'ids' ? 'sh-btn-primary' : 'sh-btn-secondary'">
-                            指定 ID
+                            By ID
                         </button>
                     </div>
                 </div>
@@ -254,13 +254,13 @@
                     <!-- Header with select controls -->
                     <div class="flex items-center justify-between mb-2">
                         <label class="text-xs font-medium text-muted-foreground">
-                            选择用例
-                            <span class="text-foreground" x-text="'（已选 ' + selectedIds.length + ' / ' + caseSummaries.length + ' 条）'"></span>
+                            Select Cases
+                            <span class="text-foreground" x-text="'(' + selectedIds.length + ' / ' + caseSummaries.length + ' selected)'"></span>
                         </label>
                         <div class="flex items-center gap-2" x-show="caseSummaries.length > 0">
                             <button type="button" @click="toggleSelectAll()" class="agent-detail-toggle" :class="selectedIds.length === caseSummaries.length && 'active'">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                <span x-text="selectedIds.length === caseSummaries.length ? '取消全选' : '全选'"></span>
+                                <span x-text="selectedIds.length === caseSummaries.length ? 'Deselect All' : 'Select All'"></span>
                             </button>
                         </div>
                     </div>
@@ -268,13 +268,13 @@
                     <!-- Search -->
                     <div class="relative mb-2">
                         <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
-                        <input type="text" x-model="searchQuery" @input="summaryPage = 0" placeholder="搜索 ID 或内容..." class="sh-input pl-9 w-full">
+                        <input type="text" x-model="searchQuery" @input="summaryPage = 0" placeholder="Search ID or content..." class="sh-input pl-9 w-full">
                     </div>
 
                     <!-- Loading -->
                     <div x-show="previewLoading" class="py-6 text-center text-sm text-muted-foreground border border-border rounded-lg">
                         <svg class="w-5 h-5 mx-auto mb-2 animate-spin text-muted-foreground" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        加载用例列表...
+                        Loading cases...
                     </div>
 
                     <!-- Checkbox list with pagination -->
@@ -295,12 +295,12 @@
 
                         <!-- Empty search result -->
                         <div x-show="filteredSummaries.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
-                            未找到匹配的用例
+                            No matching cases
                         </div>
 
                         <!-- Pagination -->
                         <div x-show="summaryTotalPages > 1" class="px-4 py-2 border-t border-border flex items-center justify-between bg-muted/30">
-                            <span class="text-xs text-muted-foreground" x-text="'第 ' + (summaryPage * summaryPageSize + 1) + '-' + Math.min((summaryPage + 1) * summaryPageSize, filteredSummaries.length) + ' / ' + filteredSummaries.length + ' 条'"></span>
+                            <span class="text-xs text-muted-foreground" x-text="(summaryPage * summaryPageSize + 1) + '-' + Math.min((summaryPage + 1) * summaryPageSize, filteredSummaries.length) + ' of ' + filteredSummaries.length"></span>
                             <div class="flex items-center gap-2">
                                 <button type="button" @click="summaryPage = Math.max(0, summaryPage - 1)" :disabled="summaryPage === 0" class="sh-btn sh-btn-secondary sh-btn-sm px-2">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
@@ -317,18 +317,18 @@
                 <!-- Other params -->
                 <div class="flex flex-wrap items-end gap-4">
                     <div class="flex flex-col gap-1.5">
-                        <label class="text-xs font-medium text-muted-foreground">Limit（最大执行数）</label>
-                        <input type="number" x-model.number="form.limit" placeholder="不限" min="1" class="sh-input w-28"
+                        <label class="text-xs font-medium text-muted-foreground">Limit (max cases)</label>
+                        <input type="number" x-model.number="form.limit" placeholder="No limit" min="1" class="sh-input w-28"
                                :disabled="form.scope === 'ids'">
                     </div>
                     <div class="flex flex-col gap-1.5">
-                        <label class="text-xs font-medium text-muted-foreground">并发数</label>
+                        <label class="text-xs font-medium text-muted-foreground">Concurrency</label>
                         <input type="number" x-model.number="form.max_concurrency" min="1" max="20" class="sh-input w-28">
                     </div>
                     <button type="submit" :disabled="!canSubmit || submitting" class="sh-btn sh-btn-primary gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/></svg>
-                        <span x-show="!submitting">开始评测</span>
-                        <span x-show="submitting">创建中...</span>
+                        <span x-show="!submitting">Start</span>
+                        <span x-show="submitting">Creating...</span>
                     </button>
                 </div>
 
@@ -346,8 +346,8 @@
         <div class="px-5 py-3 cursor-pointer" @click="showPreview = !showPreview">
             <div class="flex items-center gap-2">
                 <svg class="w-4 h-4 text-muted-foreground transition-transform shrink-0" :class="showPreview && 'rotate-90'" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
-                <h2 class="text-sm font-medium shrink-0">数据预览</h2>
-                <span class="text-xs text-muted-foreground shrink-0" x-text="caseSummaries.length > 0 ? ('前 ' + Math.min(preview.cases.length, caseSummaries.length) + ' 条 / 共 ' + caseSummaries.length.toLocaleString() + ' 条') : ''"></span>
+                <h2 class="text-sm font-medium shrink-0">Data Preview</h2>
+                <span class="text-xs text-muted-foreground shrink-0" x-text="caseSummaries.length > 0 ? ('first ' + Math.min(preview.cases.length, caseSummaries.length) + ' of ' + caseSummaries.length.toLocaleString() + ' total') : ''"></span>
             </div>
             <div class="flex flex-wrap gap-1.5 mt-2 ml-6" x-show="!showPreview && Object.keys(preview.tags).length > 0">
                 <template x-for="[tag, count] in Object.entries(preview.tags).slice(0, 5)" :key="tag">
@@ -360,7 +360,7 @@
         <div x-show="showPreview" x-transition>
             <div x-show="previewLoading" class="px-5 py-8 text-center text-sm text-muted-foreground border-t border-border">
                 <svg class="w-5 h-5 mx-auto mb-2 animate-spin text-muted-foreground" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                加载数据...
+                Loading data...
             </div>
 
             <div x-show="!previewLoading && Object.keys(preview.tags).length > 0" class="px-5 pt-3 pb-2 border-t border-border">
@@ -391,7 +391,7 @@
             </div>
 
             <div x-show="!previewLoading && previewTotalPages > 1" class="px-5 py-2.5 border-t border-border flex items-center justify-between">
-                <span class="text-xs text-muted-foreground" x-text="'第 ' + (previewPage * previewPageSize + 1) + '-' + Math.min((previewPage + 1) * previewPageSize, preview.cases.length) + ' 条预览'"></span>
+                <span class="text-xs text-muted-foreground" x-text="(previewPage * previewPageSize + 1) + '-' + Math.min((previewPage + 1) * previewPageSize, preview.cases.length) + ' of ' + preview.cases.length"></span>
                 <div class="flex gap-1">
                     <button @click="previewPage = Math.max(0, previewPage - 1)" :disabled="previewPage === 0" class="sh-btn sh-btn-secondary sh-btn-sm px-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
@@ -407,8 +407,8 @@
     <!-- ====== Active tasks ====== -->
     <div x-show="activeTasks.length > 0" class="rounded-lg border border-border bg-card mb-5">
         <div class="px-5 py-3 border-b border-border flex items-center justify-between">
-            <h2 class="text-sm font-medium">运行中的任务</h2>
-            <span class="text-xs text-muted-foreground" x-text="activeTasks.length + ' 个'"></span>
+            <h2 class="text-sm font-medium">Running Tasks</h2>
+            <span class="text-xs text-muted-foreground" x-text="activeTasks.length"></span>
         </div>
         <div class="divide-y divide-border">
             <template x-for="task in activeTasks" :key="task.task_id">
@@ -435,44 +435,44 @@
     <div class="rounded-lg border border-border bg-card">
         <div class="px-5 py-3 border-b border-border flex flex-col gap-2">
             <div class="flex items-center justify-between">
-                <h2 class="text-sm font-medium">历史报告</h2>
-                <span class="text-xs text-muted-foreground" x-text="searchedReports.length + ' / ' + filteredReports.length + ' 份'"></span>
+                <h2 class="text-sm font-medium">Reports</h2>
+                <span class="text-xs text-muted-foreground" x-text="searchedReports.length + ' / ' + filteredReports.length"></span>
             </div>
-            <!-- 筛选栏 -->
+            <!-- Filters -->
             <div class="flex items-center gap-3" x-show="reports.length > 0">
-                <!-- Benchmark 筛选 -->
+                <!-- Benchmark filter -->
                 <div class="min-w-[160px]" x-data="{ open: false }" @click.away="open = false">
                     <div class="relative">
                         <button type="button" @click="!form.benchmark && (open = !open)" class="sh-select-trigger !h-8 !text-xs" :class="form.benchmark && 'opacity-60 cursor-not-allowed'" :data-state="open ? 'open' : 'closed'">
-                            <span :class="!effectiveReportBench && 'placeholder'" x-text="effectiveReportBench || '全部 Benchmark'"></span>
+                            <span :class="!effectiveReportBench && 'placeholder'" x-text="effectiveReportBench || 'All Benchmarks'"></span>
                             <svg class="w-3.5 h-3.5 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                         </button>
                         <div x-show="open" x-transition.opacity class="sh-select-content">
                             <div @click="reportFilterBench = ''; reportFilterName = ''; reportPage = 0; open = false"
                                  class="sh-select-item !text-xs" :class="!reportFilterBench && 'selected'">
-                                全部 Benchmark
+                                All Benchmarks
                             </div>
                             <template x-for="b in reportBenchmarks" :key="b">
                                 <div @click="reportFilterBench = b; reportFilterName = ''; reportPage = 0; open = false"
                                      class="sh-select-item !text-xs" :class="reportFilterBench === b && 'selected'">
                                     <span x-text="b"></span>
-                                    <span class="ml-auto text-[10px] text-muted-foreground" x-text="reports.filter(r => r.benchmark === b).length + ' 份'"></span>
+                                    <span class="ml-auto text-[10px] text-muted-foreground" x-text="reports.filter(r => r.benchmark === b).length"></span>
                                 </div>
                             </template>
                         </div>
                     </div>
                 </div>
-                <!-- 文件名筛选 -->
+                <!-- Filename filter -->
                 <div class="min-w-[280px]" x-data="{ open: false }" @click.away="open = false">
                     <div class="relative">
                         <button type="button" @click="open = !open" class="sh-select-trigger !h-8 !text-xs font-mono" :data-state="open ? 'open' : 'closed'">
-                            <span :class="!reportFilterName && 'placeholder'" class="truncate" x-text="reportFilterName || '全部文件'"></span>
+                            <span :class="!reportFilterName && 'placeholder'" class="truncate" x-text="reportFilterName || 'All Files'"></span>
                             <svg class="w-3.5 h-3.5 text-muted-foreground shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                         </button>
                         <div x-show="open" x-transition.opacity class="sh-select-content w-max min-w-full">
                             <div @click="reportFilterName = ''; reportPage = 0; open = false"
                                  class="sh-select-item !text-xs" :class="!reportFilterName && 'selected'">
-                                全部文件
+                                All Files
                             </div>
                             <template x-for="fn in reportFilenames" :key="fn">
                                 <div @click="reportFilterName = fn; reportPage = 0; open = false"
@@ -483,19 +483,19 @@
                         </div>
                     </div>
                 </div>
-                <!-- 关键词搜索 -->
+                <!-- Keyword search -->
                 <div class="relative flex-1 min-w-[220px] max-w-md">
                     <svg class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/></svg>
                     <input type="text"
                            x-model="reportSearchQuery"
                            @input="reportPage = 0"
-                           placeholder="搜索 benchmark / dataset / 文件名"
+                           placeholder="Search benchmark / dataset / filename"
                            class="sh-input !h-8 !text-xs pl-8 w-full">
                 </div>
-                <!-- 清除按钮 -->
+                <!-- Clear button -->
                 <button x-show="reportFilterBench || reportFilterName || reportSearchQuery" @click="reportFilterBench = ''; reportFilterName = ''; reportSearchQuery = ''; reportPage = 0"
                         class="h-8 px-2.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors whitespace-nowrap">
-                    清除筛选
+                    Clear Filters
                 </button>
             </div>
         </div>
@@ -518,14 +518,14 @@
                     </a>
                     <button @click.stop="deleteReport(r.benchmark, r.filename)"
                             class="opacity-0 group-hover:opacity-100 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all shrink-0"
-                            title="删除报告">
+                            title="Delete report">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
                     </button>
                 </div>
             </template>
         </div>
         <div x-show="searchedReports.length > 0 && reportTotalPages > 1" class="px-5 py-2.5 border-t border-border flex items-center justify-between">
-            <span class="text-xs text-muted-foreground" x-text="'第 ' + (Math.min(reportPage, reportTotalPages - 1) * reportPageSize + 1) + '-' + Math.min((Math.min(reportPage, reportTotalPages - 1) + 1) * reportPageSize, searchedReports.length) + ' / ' + searchedReports.length + ' 份'"></span>
+            <span class="text-xs text-muted-foreground" x-text="(Math.min(reportPage, reportTotalPages - 1) * reportPageSize + 1) + '-' + Math.min((Math.min(reportPage, reportTotalPages - 1) + 1) * reportPageSize, searchedReports.length) + ' of ' + searchedReports.length"></span>
             <div class="flex items-center gap-2">
                 <button type="button" @click="reportPage = Math.max(0, reportPage - 1)" :disabled="reportPage === 0" class="sh-btn sh-btn-secondary sh-btn-sm px-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
@@ -537,10 +537,10 @@
             </div>
         </div>
         <div x-show="searchedReports.length === 0 && reports.length > 0" class="px-5 py-10 text-center text-sm text-muted-foreground">
-            无匹配的报告
+            No matching reports
         </div>
         <div x-show="reports.length === 0" class="px-5 py-10 text-center text-sm text-muted-foreground">
-            暂无历史报告
+            No reports yet
         </div>
     </div>
 </div>
@@ -550,7 +550,7 @@
 {% include "partials/cost_estimate.html" %}
 <script>
 
-/* 长文本字段名模式 — 匹配时分配全宽 */
+/* Long text field name pattern — assign full width when matched */
 const _fullWidthPattern = /prompt|description|note|message|content/i;
 
 function taskManager() {
@@ -565,9 +565,9 @@ function taskManager() {
         targetAgentList: [],    // [{name, short_desc}]
         targetSchemas: {},      // { type_name: { fields: [...] } }
         targetValues: {},       // { field_name: value }
-        targetSpecs: [],        // metadata.json TargetSpec 列表（支持多 target 类型）
-        targetTypeLocked: false,  // 仅单个 spec 时锁定类型选择
-        currentEvaluator: '',     // 当前选中 dataset 的评估器类型
+        targetSpecs: [],        // metadata.json TargetSpec list (supports multiple target types)
+        targetTypeLocked: false,  // Lock type selection when only one spec
+        currentEvaluator: '',     // Current dataset's evaluator type
 
         prepareStatus: null,    // null | "running" | "completed" | "error"
         prepareError: null,
@@ -582,21 +582,21 @@ function taskManager() {
         previewPage: 0, previewPageSize: 10,
         reportPage: 0, reportPageSize: 10,
 
-        /* ---- 字段尺寸分类（通用） ---- */
+        /* ---- Field size classification ---- */
         fieldSpanClass(field) {
-            // 长文本字段（prompt / description / ...）→ 全宽独占一行
+            // Long text fields (prompt / description / ...) → full width
             if (!field.enum && _fullWidthPattern.test(field.name)) {
                 return 'col-span-12';
             }
-            // model 字段选项名较长（含厂商前缀 + 价格标注）→ 2/3 宽度
+            // Model field has long options (vendor prefix + pricing) → 2/3 width
             if (field.name === 'model') {
                 return 'col-span-12 sm:col-span-8';
             }
-            // 枚举、短文本 → 1/3 宽度
+            // Enum, short text → 1/3 width
             return 'col-span-12 sm:col-span-4';
         },
 
-        /* ---- 费用 / 耗时预估（使用 cost_estimate.html 两因子模型，数据来自 plugin _cost_meta） ---- */
+        /* ---- Cost / time estimation (two-factor model from cost_estimate.html, data from plugin _cost_meta) ---- */
         estCost(count) {
             const targetType = this.form.target_type || '';
             const model = this.targetValues?.model || '';
@@ -612,20 +612,20 @@ function taskManager() {
             return _estTimeLabel(count, conc);
         },
 
-        /* Dataset 下拉框文本：用例数 + 费用 + 耗时 */
+        /* Dataset dropdown hint: case count + cost + time */
         datasetHint(d) {
-            const parts = [d.case_count.toLocaleString() + ' 条'];
+            const parts = [d.case_count.toLocaleString() + ' cases'];
             const cost = this.estCostLabel(d.case_count);
             if (cost !== '—') parts.push(cost);
             parts.push(this.estTimeLabel(d.case_count));
             return parts.join(' · ');
         },
 
-        /* 从 targetSpecs 列表中查找当前选中 target_type 对应的 spec */
+        /* Find spec matching current target_type from targetSpecs */
         get currentTargetSpec() {
             return this.targetSpecs.find(s => s.type === this.form.target_type) || null;
         },
-        /* 可选的 target 类型列表（有 specs 时仅展示 specs 中的类型，否则全部） */
+        /* Available target types (only spec types when specs exist, otherwise all) */
         get availableTargetTypes() {
             if (this.targetSpecs.length > 0) {
                 const specTypes = new Set(this.targetSpecs.map(s => s.type));
@@ -633,7 +633,7 @@ function taskManager() {
             }
             return this.targetAgentList;
         },
-        /* 切换 target type 后，从对应 spec 填充默认值 */
+        /* After switching target type, fill defaults from corresponding spec */
         applyCurrentSpecDefaults() {
             this.resetTargetValues();
             const spec = this.currentTargetSpec;
@@ -649,9 +649,9 @@ function taskManager() {
             const schema = this.targetSchemas[this.form.target_type];
             if (!schema) return [];
             const spec = this.currentTargetSpec;
-            // 无 spec → 全部字段可编辑（fallback）
+            // No spec → all fields editable (fallback)
             if (!spec || !spec.fields) return schema.fields.map(f => ({ ...f, editable: true }));
-            // 有 spec → 仅展示 spec 中声明的字段，合并 agent schema 的 enum/title/description
+            // Has spec → show only spec-declared fields, merge agent schema enum/title/description
             const agentFieldMap = {};
             for (const f of schema.fields) agentFieldMap[f.name] = f;
             const result = [];
@@ -696,7 +696,7 @@ function taskManager() {
             const start = this.previewPage * this.previewPageSize;
             return this.preview.cases.slice(start, start + this.previewPageSize);
         },
-        /* 实际执行数量 */
+        /* Actual run count */
         get runCaseCount() {
             if (this.form.scope === 'ids') return this.selectedIds.length;
             const total = this.caseSummaries.length;
@@ -705,13 +705,13 @@ function taskManager() {
         get runSummary() {
             if (this.form.scope === 'ids') {
                 const n = this.selectedIds.length;
-                return n > 0 ? `将执行 ${n} 条指定用例` : '请选择用例';
+                return n > 0 ? `Running ${n} selected cases` : 'Select cases';
             }
             const total = this.caseSummaries.length;
             if (this.form.limit && this.form.limit < total) {
-                return `将从 ${total.toLocaleString()} 条中执行前 ${this.form.limit} 条`;
+                return `Running first ${this.form.limit} of ${total.toLocaleString()} cases`;
             }
-            return `将执行全部 ${total.toLocaleString()} 条用例`;
+            return `Running all ${total.toLocaleString()} cases`;
         },
         get runEstimate() {
             const n = this.runCaseCount;
@@ -719,7 +719,7 @@ function taskManager() {
             const cost = this.estCostLabel(n);
             const time = this.estTimeLabel(n);
             const parts = [];
-            if (cost !== '—') parts.push('预估 ' + cost);
+            if (cost !== '—') parts.push('est. ' + cost);
             parts.push(time);
             return parts.length > 0 ? '· ' + parts.join(' · ') : '';
         },
@@ -729,10 +729,10 @@ function taskManager() {
             const visibleIds = visible.map(c => c.id);
             const allVisibleSelected = visibleIds.every(id => this.selectedIds.includes(id));
             if (allVisibleSelected) {
-                // 取消当前可见的
+                // Deselect visible
                 this.selectedIds = this.selectedIds.filter(id => !visibleIds.includes(id));
             } else {
-                // 选中当前可见的（保留已有的）
+                // Select visible (keep existing)
                 const merged = new Set([...this.selectedIds, ...visibleIds]);
                 this.selectedIds = [...merged];
             }
@@ -746,7 +746,7 @@ function taskManager() {
             const rpData = await rpRes.json();
             this.reports = rpData.reports || [];
 
-            // 初始化费用预估元数据（来自 plugin _cost_meta）
+            // Init cost estimation metadata (from plugin _cost_meta)
             const agents = await taRes.json();
             const evalAgents = await eaRes.json();
             _initCostMeta(evalAgents, agents);
@@ -757,7 +757,7 @@ function taskManager() {
                 for (const [name, prop] of Object.entries(schema.properties || {})) {
                     if (name === 'type') continue;
                     let enumValues = prop.enum || null;
-                    // anyOf 处理（Pydantic Optional 字段）
+                    // anyOf handling (Pydantic Optional fields)
                     if (!enumValues && prop.anyOf) {
                         for (const sub of prop.anyOf) {
                             if (sub.enum) enumValues = sub.enum;
@@ -775,7 +775,7 @@ function taskManager() {
                 this.targetSchemas[agent.name] = { fields };
                 this.targetAgentList.push({ name: agent.name, short_desc: agent.short_desc });
             }
-            // 默认选中第一个 target agent
+            // Default to first target agent
             if (this.targetAgentList.length > 0 && !this.form.target_type) {
                 this.form.target_type = this.targetAgentList[0].name;
             }
@@ -813,7 +813,7 @@ function taskManager() {
             this.preview = { cases: [], tags: {} };
             this.summaryPage = 0;
             this.previewPage = 0;
-            // 重置报告区筛选（benchmark 已由顶部选择联动）
+            // Reset report filters (benchmark linked to top selector)
             this.reportFilterBench = '';
             this.reportFilterName = '';
             this.reportPage = 0;
@@ -822,25 +822,25 @@ function taskManager() {
             this.datasets = b ? b.datasets : [];
             this.prepareStatus = b?.prepare_status || null;
             this.prepareError = b?.prepare_error || null;
-            this.targetSpecs = b?.target || [];  // TargetSpec 列表
+            this.targetSpecs = b?.target || [];  // TargetSpec list
             if (this.targetSpecs.length === 1) {
-                // 单 target → 锁定类型
+                // Single target → lock type
                 this.form.target_type = this.targetSpecs[0].type;
                 this.targetTypeLocked = true;
                 this.applyCurrentSpecDefaults();
             } else if (this.targetSpecs.length > 1) {
-                // 多 target → 用户可选，默认第一个
+                // Multiple targets → user selects, default first
                 this.form.target_type = this.targetSpecs[0].type;
                 this.targetTypeLocked = false;
                 this.applyCurrentSpecDefaults();
             } else {
-                // 无 spec → 完全自由选择
+                // No spec → free selection
                 this.targetTypeLocked = false;
                 this.form.target_type = this.targetAgentList[0]?.name ?? '';
                 this.resetTargetValues();
             }
         },
-        // 应用一个 TargetSpec（设置 form.target_type、targetValues）
+        // Apply a TargetSpec (sets form.target_type, targetValues)
         _applyTargetSpec(spec) {
             this.form.target_type = spec.type;
             this.resetTargetValues();
@@ -857,7 +857,7 @@ function taskManager() {
             this.searchQuery = '';
             this.summaryPage = 0;
             this.previewPage = 0;
-            // 从 datasets 中获取当前 dataset 的评估器类型
+            // Get evaluator type from current dataset
             const ds = this.datasets.find(d => d.name === this.form.dataset);
             this.currentEvaluator = ds?.evaluator || '';
             await this.loadPreview();
@@ -891,7 +891,7 @@ function taskManager() {
             return '';
         },
         buildTarget() {
-            // 仅发送 editable 字段的值作为 cli_overrides（后端 resolve_effective_target 处理合并）
+            // Only send editable field values as cli_overrides (backend resolve_effective_target handles merging)
             const target = {};
             const editableNames = new Set(
                 this.targetFields.filter(f => f.editable).map(f => f.name)
@@ -927,14 +927,14 @@ function taskManager() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
                 });
-                if (!res.ok) { const err = await res.json(); alert(err.detail || '创建失败'); return; }
+                if (!res.ok) { const err = await res.json(); alert(err.detail || 'Failed to create task'); return; }
                 const task = await res.json();
                 window.location.href = '/tasks/' + task.task_id;
             } finally { this.submitting = false; }
         },
         get activeTasks() { return this.tasks.filter(t => t.status === 'running'); },
-        /* ---- 报告筛选 ---- */
-        // 报告筛选的有效 benchmark：优先取顶部选中的 benchmark，其次取报告区下拉
+        /* ---- Report filters ---- */
+        // Effective benchmark for report filter: top selector takes priority over dropdown
         get effectiveReportBench() {
             return this.form.benchmark || this.reportFilterBench;
         },
@@ -942,7 +942,7 @@ function taskManager() {
             return [...new Set(this.reports.map(r => r.benchmark))].sort();
         },
         get reportFilenames() {
-            // 文件名列表跟随 benchmark 筛选联动
+            // Filename list follows benchmark filter
             const base = this.effectiveReportBench
                 ? this.reports.filter(r => r.benchmark === this.effectiveReportBench)
                 : this.reports;
@@ -979,7 +979,7 @@ function taskManager() {
             const [taskRes, bmRes] = await Promise.all([fetch('/api/tasks'), fetch('/api/benchmarks')]);
             this.tasks = (await taskRes.json()).reverse();
             this.benchmarks = await bmRes.json();
-            // 刷新当前选中 benchmark 的准备状态
+            // Refresh prepare status for selected benchmark
             if (this.form.benchmark) {
                 const b = this.benchmarks.find(x => x.name === this.form.benchmark);
                 this.prepareStatus = b?.prepare_status || null;
@@ -990,28 +990,28 @@ function taskManager() {
             try {
                 const res = await fetch('/api/checkpoints');
                 if (res.ok) this.checkpoints = await res.json();
-            } catch (e) { console.warn('加载检查点失败', e); }
+            } catch (e) { console.warn('Failed to load checkpoints', e); }
         },
         async resumeCheckpoint(sessionId) {
             try {
                 const res = await fetch(`/api/checkpoints/${sessionId}/resume`, { method: 'POST' });
-                if (!res.ok) { const err = await res.json(); alert(err.detail || '恢复失败'); return; }
+                if (!res.ok) { const err = await res.json(); alert(err.detail || 'Failed to resume'); return; }
                 const task = await res.json();
                 window.location.href = `/tasks/${task.task_id}`;
-            } catch (e) { alert('恢复失败: ' + e.message); }
+            } catch (e) { alert('Resume failed: ' + e.message); }
         },
         async deleteCheckpoint(sessionId) {
-            if (!confirm('确定放弃此检查点？已完成的进度将丢失。')) return;
+            if (!confirm('Discard this checkpoint? Completed progress will be lost.')) return;
             await fetch(`/api/checkpoints/${sessionId}`, { method: 'DELETE' });
             await this.loadCheckpoints();
         },
         async deleteReport(benchmark, filename) {
-            if (!confirm(`确定删除报告 ${filename}？此操作不可撤销。`)) return;
+            if (!confirm(`Delete report ${filename}? This cannot be undone.`)) return;
             const res = await fetch(`/api/reports/${benchmark}/${filename}`, { method: 'DELETE' });
-            if (!res.ok) { alert('删除失败: ' + (await res.json()).detail); return; }
+            if (!res.ok) { alert('Delete failed: ' + (await res.json()).detail); return; }
             this.reports = this.reports.filter(r => !(r.benchmark === benchmark && r.filename === filename));
         },
-        formatTime(ts) { return ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : ''; },
+        formatTime(ts) { return ts ? new Date(ts).toLocaleString('en-US', { hour12: false }) : ''; },
         formatReportDate(d) {
             // d = "20260212" or "20260212_142012"
             if (!d) return '';

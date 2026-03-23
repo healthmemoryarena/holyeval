@@ -1,12 +1,12 @@
-{# 共享费用预估工具 — benchmarks/index.html, benchmarks/detail.html, tasks/index.html 共用 #}
-{# 两因子模型: 总预估 = target token 费用 + eval 评估开销 #}
+{# Shared cost estimation utilities — used by benchmarks/index.html, benchmarks/detail.html, tasks/index.html #}
+{# Two-factor model: total estimate = target token cost + eval overhead #}
 {# #}
-{# 费用数据来源: #}
-{#   - eval agent 的 est_cost_per_case: 来自 plugin _cost_meta（API 动态加载） #}
-{#   - target agent 的 est_input/output_tokens: 来自 plugin _cost_meta（API 动态加载） #}
-{#   - token 定价: 外部数据（模型厂商定价），保留在此处 #}
+{# Cost data sources: #}
+{#   - eval agent est_cost_per_case: from plugin _cost_meta (loaded via API) #}
+{#   - target agent est_input/output_tokens: from plugin _cost_meta (loaded via API) #}
+{#   - token pricing: external data (vendor public pricing), maintained here #}
 <script>
-/* ===== Token 定价（USD / 1M tokens）— 外部数据，各模型厂商公开定价 ===== */
+/* ===== Token pricing (USD / 1M tokens) — external data, vendor public pricing ===== */
 const _estTokenPricing = {
     'gpt-5.4':                  { input: 2.50, output: 15.00 },
     'gpt-5.2':                  { input: 1.75, output: 14.00 },
@@ -24,8 +24,8 @@ const _estTokenPricing = {
 };
 const _estDefaultPricing = { input: 2.00, output: 8.00 };
 
-/* ===== 模型展示元数据（下拉框 TAG 用）===== */
-/* price: 输入价格简写（$/1M tokens），date: 发布月份 */
+/* ===== Model display metadata (for dropdown tags) ===== */
+/* price: input price shorthand ($/1M tokens), date: release month */
 const _modelMeta = {
     'gpt-5.4':                  { price: '2.50', date: '2026-02' },
     'gpt-5.2':                  { price: '1.75', date: '2025-12' },
@@ -40,19 +40,19 @@ const _modelMeta = {
     'z-ai/glm-5':              { price: '0.80', date: '2025-08' },
 };
 
-/* ===== 从 plugin _cost_meta 动态构建的费用参数（由页面 JS 填充） ===== */
+/* ===== Cost parameters dynamically built from plugin _cost_meta (populated by page JS) ===== */
 /* { eval_agent_name: { est_cost_per_case } } */
 const _evalCostMeta = {};
 /* { target_agent_name: { est_input_tokens, est_output_tokens } } */
 const _targetCostMeta = {};
 
-const _estDefaultEvalCost = 0.010;     // 未声明 _cost_meta 的 eval agent 默认值
-const _estSecPerCase = 12;             // 单 case 平均耗时（秒）
-const _estDefaultConcurrency = 5;      // 默认并发数
+const _estDefaultEvalCost = 0.010;     // default for eval agents without _cost_meta
+const _estSecPerCase = 12;             // average time per case (seconds)
+const _estDefaultConcurrency = 5;      // default concurrency
 
 /**
- * 从 API 返回的 agent 列表初始化费用元数据
- * 页面 init 时调用，传入 /api/agents/eval 和 /api/agents/target 的响应
+ * Initialize cost metadata from API-returned agent lists.
+ * Called at page init with responses from /api/agents/eval and /api/agents/target.
  */
 function _initCostMeta(evalAgents, targetAgents) {
     if (evalAgents) {
@@ -72,9 +72,9 @@ function _initCostMeta(evalAgents, targetAgents) {
 }
 
 /**
- * 预估 target 单次调用费用
- * @param {string} targetType - target agent 类型名
- * @param {string} model - 用户选择的模型名
+ * Estimate target single-call cost.
+ * @param {string} targetType - target agent type name
+ * @param {string} model - user-selected model name
  * @returns {number} USD
  */
 function _estTargetCallCost(targetType, model) {
@@ -89,8 +89,8 @@ function _estTargetCallCost(targetType, model) {
 }
 
 /**
- * 预估 eval 单 case 费用
- * @param {string} evaluator - eval agent 类型名
+ * Estimate eval cost per case.
+ * @param {string} evaluator - eval agent type name
  * @returns {number} USD
  */
 function _estEvalCaseCost(evaluator) {
@@ -101,10 +101,10 @@ function _estEvalCaseCost(evaluator) {
 }
 
 /**
- * 预估单条 case 总费用
- * @param {string} targetType - target agent 类型名
- * @param {string} model - target 模型名
- * @param {string} evaluator - eval agent 类型名
+ * Estimate total cost per case.
+ * @param {string} targetType - target agent type name
+ * @param {string} model - target model name
+ * @param {string} evaluator - eval agent type name
  * @returns {number} USD
  */
 function _estCostPerCase(targetType, model, evaluator) {
@@ -112,14 +112,14 @@ function _estCostPerCase(targetType, model, evaluator) {
 }
 
 /**
- * 预估 N 条 case 的总费用
+ * Estimate total cost for N cases.
  */
 function _estTotalCost(count, targetType, model, evaluator) {
     return count * _estCostPerCase(targetType, model, evaluator);
 }
 
 /**
- * 格式化预估费用为字符串
+ * Format estimated cost as a string.
  */
 function _estCostLabel(usd) {
     if (usd === 0) return '—';
@@ -130,19 +130,19 @@ function _estCostLabel(usd) {
 }
 
 /**
- * 预估耗时（秒）
+ * Estimate duration in seconds.
  */
 function _estTime(count, concurrency) {
     return Math.ceil(count * _estSecPerCase / (concurrency || _estDefaultConcurrency));
 }
 
 /**
- * 格式化预估耗时为字符串
+ * Format estimated duration as a string.
  */
 function _estTimeLabel(count, concurrency) {
     const s = _estTime(count, concurrency);
-    if (s < 60) return '~' + s + ' 秒';
-    if (s < 3600) return '~' + Math.ceil(s / 60) + ' 分钟';
-    return '~' + (s / 3600).toFixed(1) + ' 小时';
+    if (s < 60) return '~' + s + 's';
+    if (s < 3600) return '~' + Math.ceil(s / 60) + 'min';
+    return '~' + (s / 3600).toFixed(1) + 'h';
 }
 </script>

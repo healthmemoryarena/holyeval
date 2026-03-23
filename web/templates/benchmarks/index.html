@@ -1,29 +1,29 @@
 {% extends "base.html" %}
-{% block title %}指标数据 - HolyEval{% endblock %}
+{% block title %}Benchmarks - HolyEval{% endblock %}
 
 {% block content %}
 <div x-data="benchmarkBrowser()" x-init="init()">
     <div class="mb-6">
-        <h1 class="text-xl font-semibold tracking-tight">指标数据</h1>
-        <p class="text-sm text-muted-foreground mt-1">浏览 benchmark 数据集，查看用例分布和内容</p>
+        <h1 class="text-xl font-semibold tracking-tight">Benchmarks</h1>
+        <p class="text-sm text-muted-foreground mt-1">Browse benchmark datasets and case distributions</p>
     </div>
 
     <!-- Summary stats -->
     <div class="grid grid-cols-3 gap-4 mb-2">
         <div class="rounded-lg border border-border bg-card p-4">
-            <div class="text-xs text-muted-foreground mb-1">评测套件</div>
+            <div class="text-xs text-muted-foreground mb-1">Suites</div>
             <div class="text-2xl font-semibold" x-text="benchmarks.length"></div>
         </div>
         <div class="rounded-lg border border-border bg-card p-4">
-            <div class="text-xs text-muted-foreground mb-1">数据集总数</div>
+            <div class="text-xs text-muted-foreground mb-1">Datasets</div>
             <div class="text-2xl font-semibold" x-text="totalDatasets"></div>
         </div>
         <div class="rounded-lg border border-border bg-card p-4">
-            <div class="text-xs text-muted-foreground mb-1">用例总量</div>
+            <div class="text-xs text-muted-foreground mb-1">Total Cases</div>
             <div class="text-2xl font-semibold" x-text="totalCases.toLocaleString()"></div>
         </div>
     </div>
-    <p class="text-[11px] text-muted-foreground mb-6">* 费用和耗时为预估值，基于默认模型费率和 5 并发计算</p>
+    <p class="text-[11px] text-muted-foreground mb-6">* Cost and duration are estimates based on default model rates and 5 concurrency</p>
 
     <!-- Benchmark cards -->
     <div class="grid grid-cols-1 gap-5">
@@ -50,19 +50,19 @@
                                                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                                 </svg>
-                                                准备中
+                                                Preparing
                                             </span>
                                         </template>
                                         <template x-if="b.prepare_status === 'error'">
                                             <span class="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-300">
                                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
-                                                准备失败
+                                                Prep Failed
                                             </span>
                                         </template>
                                     </div>
                                     <div class="flex items-center gap-2 mt-0.5">
-                                        <span class="badge badge-secondary text-xs" x-text="b.datasets.length + ' 个数据集'"></span>
-                                        <span class="text-xs text-muted-foreground" x-text="sumCases(b) + ' 条用例'"></span>
+                                        <span class="badge badge-secondary text-xs" x-text="b.datasets.length + ' datasets'"></span>
+                                        <span class="text-xs text-muted-foreground" x-text="sumCases(b) + ' cases'"></span>
                                     </div>
                                 </div>
                             </div>
@@ -82,7 +82,7 @@
                                 <template x-if="!b.prepare_status || b.prepare_status === 'completed'">
                                     <a :href="'/tasks?benchmark=' + b.name" class="agent-detail-toggle">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/></svg>
-                                        执行评测
+                                        Run Eval
                                     </a>
                                 </template>
                                 <template x-if="b.prepare_status === 'running'">
@@ -91,13 +91,13 @@
                                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                         </svg>
-                                        准备中...
+                                        Preparing...
                                     </span>
                                 </template>
                                 <template x-if="b.prepare_status === 'error'">
                                     <span class="agent-detail-toggle opacity-50 pointer-events-none text-red-500">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
-                                        准备失败
+                                        Prep Failed
                                     </span>
                                 </template>
                             </div>
@@ -110,10 +110,10 @@
                         <div class="flex-1 min-w-0">
                             <!-- Table header -->
                             <div class="flex items-center gap-3 px-3 pb-2 border-b border-border text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                                <span class="flex-1">数据集</span>
-                                <span class="w-16 text-right">用例</span>
-                                <span class="w-20 text-right">预估费用</span>
-                                <span class="w-20 text-right">预估耗时</span>
+                                <span class="flex-1">Dataset</span>
+                                <span class="w-16 text-right">Cases</span>
+                                <span class="w-20 text-right">Est. Cost</span>
+                                <span class="w-20 text-right">Est. Time</span>
                                 <span class="w-4"></span>
                             </div>
                             <!-- Dataset rows -->
@@ -131,7 +131,7 @@
                             </div>
                             <!-- Totals row -->
                             <div class="flex items-center gap-3 px-3 pt-2.5 mt-0.5 border-t border-border text-xs text-muted-foreground">
-                                <span class="flex-1 font-medium">合计</span>
+                                <span class="flex-1 font-medium">Total</span>
                                 <span class="w-16 text-right tabular-nums font-medium" x-text="sumCases(b)"></span>
                                 <span class="w-20 text-right tabular-nums" x-text="estCostLabel(sumCasesRaw(b), b.target, (b.datasets[0] || {}).evaluator)"></span>
                                 <span class="w-20 text-right tabular-nums" x-text="estTimeLabel(sumCasesRaw(b))"></span>
@@ -145,8 +145,8 @@
     </div>
 
     <div x-show="benchmarks.length === 0" class="text-center py-12 text-sm text-muted-foreground">
-        <p>未找到 benchmark 数据</p>
-        <p class="text-xs mt-1">请确认 benchmark/data/ 目录下有 JSONL 文件</p>
+        <p>No benchmark data found</p>
+        <p class="text-xs mt-1">Ensure JSONL files exist in benchmark/data/</p>
     </div>
 </div>
 {% endblock %}
@@ -169,7 +169,7 @@ const _benchMeta = {
     },
 };
 
-/* 费用和耗时预估使用 cost_estimate.html 中的共享两因子模型 */
+/* Cost/duration estimates use the shared two-factor model from cost_estimate.html */
 
 function benchmarkBrowser() {
     return {
@@ -180,9 +180,9 @@ function benchmarkBrowser() {
         sumCasesRaw(b) { return b.datasets.reduce((a, d) => a + d.case_count, 0); },
         getMeta(name) { return _benchMeta[name] || _benchMeta._default; },
 
-        /* 从 markdown description 提取首段纯文本摘要 */
+        /* Extract first-paragraph plain text summary from markdown description */
         briefDesc(desc) {
-            if (!desc) return '暂无描述';
+            if (!desc) return 'No description';
             const lines = desc.split('\n');
             let collecting = false;
             const parts = [];
@@ -193,10 +193,10 @@ function benchmarkBrowser() {
                     parts.push(line.replace(/\*\*/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/`([^`]+)`/g, '$1').trim());
                 }
             }
-            return parts.join(' ') || '暂无描述';
+            return parts.join(' ') || 'No description';
         },
 
-        /* ---- 费用 / 耗时预估（使用 cost_estimate.html 两因子模型） ---- */
+        /* ---- Cost / duration estimates (using cost_estimate.html two-factor model) ---- */
         estCostLabel(count, target, evaluator) {
             const first = Array.isArray(target) ? target[0] : target;
             const targetType = first?.type || '';
@@ -212,7 +212,7 @@ function benchmarkBrowser() {
             this.benchmarks = await bmRes.json();
             _initCostMeta(await evalRes.json(), await targetRes.json());
 
-            // 如果有 benchmark 正在准备中，轮询刷新直到完成
+            // Poll refresh if any benchmark is still preparing
             this._startPreparePolling();
         },
         _startPreparePolling() {

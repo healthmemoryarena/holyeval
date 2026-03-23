@@ -1,7 +1,7 @@
-"""eval_agent — 评估代理插件包
+"""eval_agent — Evaluation agent plugin package
 
-导入本模块会触发子类注册（__init_subclass__），使评估器可通过名称查找。
-内部插件（indicator 等）按需加载，缺失时静默跳过。
+Importing this module triggers subclass registration (__init_subclass__), making evaluators discoverable by name.
+Internal plugins (indicator, etc.) are loaded on demand; missing ones are silently skipped.
 """
 
 from evaluator.plugin.eval_agent.hallucination_eval_agent import HallucinationEvalAgent
@@ -24,7 +24,7 @@ __all__ = [
     "MemoryArenaEvalAgent",
 ]
 
-# —— 内部插件（发布时排除，import 失败不影响框架运行）——
+# -- Internal plugins (excluded at publish time, import failure does not affect framework) --
 
 try:
     from evaluator.plugin.eval_agent.indicator_eval_agent import IndicatorEvalAgent  # noqa: F401

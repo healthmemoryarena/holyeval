@@ -1,18 +1,18 @@
-<!-- Tag 分组统计卡片 — 需要父级 Alpine 提供 tagStats 对象 (key=tag, value={total, pass_count, fail_count, pass_rate, avg_score}) -->
+<!-- Tag group stats card — requires parent Alpine scope to provide tagStats object (key=tag, value={total, pass_count, fail_count, pass_rate, avg_score}) -->
 <div x-show="Object.keys(tagStats).length > 0" class="rounded-lg border border-border bg-card p-5 mb-5">
     <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-medium">标签统计</h3>
-        <span class="text-xs text-muted-foreground" x-text="Object.keys(tagStats).length + ' 个标签'"></span>
+        <h3 class="text-sm font-medium">Tag Stats</h3>
+        <span class="text-xs text-muted-foreground" x-text="Object.keys(tagStats).length + ' tags'"></span>
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-xs">
             <thead>
                 <tr class="border-b border-border text-muted-foreground">
-                    <th class="text-left py-2 pr-4 font-medium">标签</th>
-                    <th class="text-right py-2 px-3 font-medium">数量</th>
+                    <th class="text-left py-2 pr-4 font-medium">Tag</th>
+                    <th class="text-right py-2 px-3 font-medium">Count</th>
                     <th class="text-right py-2 px-3 font-medium">Pass Rate</th>
                     <th class="text-right py-2 px-3 font-medium">Avg Score</th>
-                    <th class="py-2 pl-4 font-medium w-32">分布</th>
+                    <th class="py-2 pl-4 font-medium w-32">Distribution</th>
                 </tr>
             </thead>
             <tbody>

@@ -1,7 +1,8 @@
-"""PrepareManager — 管理 benchmark 准备脚本的后台执行
+"""PrepareManager — manages background execution of benchmark prepare scripts
 
-metadata.json 中声明 "prepare" 字段（Python 模块路径）的 benchmark，
-在 Web UI 启动时自动异步执行准备脚本。准备期间 benchmark 不可用于创建任务。
+Benchmarks declaring a "prepare" field (Python module path) in metadata.json
+are automatically executed asynchronously on Web UI startup. Benchmarks are
+unavailable for task creation while preparation is in progress.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PrepareEntry:
-    """单个 benchmark 的准备状态"""
+    """Preparation status for a single benchmark"""
 
     benchmark: str
     module_path: str  # e.g. "generator.theta_benchmark.build_datasets"
@@ -32,12 +33,12 @@ class PrepareEntry:
 
 
 class PrepareManager:
-    """管理 benchmark 准备脚本（Web 启动时执行，进程隔离）"""
+    """Manages benchmark prepare scripts (executed on Web startup, process-isolated)"""
 
     def __init__(self) -> None:
         self._entries: dict[str, PrepareEntry] = {}
 
-    # ==================== 查询 ====================
+    # ==================== Query ====================
 
     def get_status(self, benchmark: str) -> PrepareEntry | None:
         return self._entries.get(benchmark)
@@ -49,10 +50,10 @@ class PrepareManager:
         entry = self._entries.get(benchmark)
         return entry is not None and entry.status == "running"
 
-    # ==================== 启动 ====================
+    # ==================== Startup ====================
 
     async def start_all(self) -> None:
-        """扫描所有 benchmark，启动含 prepare 字段的脚本"""
+        """Scan all benchmarks and start scripts with a prepare field"""
         if not _DATA_DIR.is_dir():
             return
 
@@ -69,10 +70,10 @@ class PrepareManager:
         entry = PrepareEntry(benchmark=benchmark, module_path=module_path)
         self._entries[benchmark] = entry
         entry._task = asyncio.create_task(self._run_script(entry))
-        logger.info("启动准备脚本: %s (%s)", benchmark, module_path)
+        logger.info("Starting prepare script: %s (%s)", benchmark, module_path)
 
     async def _run_script(self, entry: PrepareEntry) -> None:
-        """以子进程方式执行准备脚本"""
+        """Execute prepare script as a subprocess"""
         try:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
@@ -80,7 +81,7 @@ class PrepareManager:
                 entry.module_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=str(Path(__file__).resolve().parents[3]),  # 项目根目录
+                cwd=str(Path(__file__).resolve().parents[3]),  # project root
             )
             stdout, stderr = await proc.communicate()
 
@@ -89,7 +90,7 @@ class PrepareManager:
 
             if proc.returncode == 0:
                 entry.status = "completed"
-                logger.info("准备脚本完成: %s (耗时 %.1fs)", entry.benchmark, elapsed)
+                logger.info("Prepare script done: %s (%.1fs)", entry.benchmark, elapsed)
                 if stdout:
                     for line in stdout.decode().strip().splitlines()[-5:]:
                         logger.debug("[%s stdout] %s", entry.benchmark, line)
@@ -97,22 +98,22 @@ class PrepareManager:
                 entry.status = "error"
                 err_msg = stderr.decode()[-1000:] if stderr else f"exit code {proc.returncode}"
                 entry.error = err_msg
-                logger.error("准备脚本失败: %s (exit=%d) - %s", entry.benchmark, proc.returncode, err_msg)
+                logger.error("Prepare script failed: %s (exit=%d) - %s", entry.benchmark, proc.returncode, err_msg)
 
         except Exception as e:
             entry.finished_at = datetime.now()
             entry.status = "error"
             entry.error = str(e)
-            logger.error("准备脚本异常: %s - %s", entry.benchmark, e, exc_info=True)
+            logger.error("Prepare script exception: %s - %s", entry.benchmark, e, exc_info=True)
 
-    # ==================== 关闭 ====================
+    # ==================== Shutdown ====================
 
     def cancel_all(self) -> None:
-        """关闭时取消所有运行中的准备脚本"""
+        """Cancel all running prepare scripts on shutdown"""
         for entry in self._entries.values():
             if entry.status == "running" and entry._task:
                 entry._task.cancel()
 
 
-# 全局单例
+# Global singleton
 prepare_manager = PrepareManager()

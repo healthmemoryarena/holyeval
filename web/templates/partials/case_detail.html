@@ -1,23 +1,23 @@
-{# 共享 case 展开详情 — tasks/detail.html 和 reports/detail.html 共用
-   调用侧需保证 Alpine scope 中有: caseData (case 报告对象)、以及挂载了 mixin 方法 #}
+{# Shared case detail partial — used by tasks/detail.html and reports/detail.html
+   Caller must ensure Alpine scope has: caseData (case report object) and mixin methods mounted #}
 
 <!-- Eval summary bar -->
 <div class="flex flex-wrap items-center gap-x-5 gap-y-1">
-    <div class="text-xs"><span class="text-muted-foreground">分数</span> <span class="font-semibold ml-1" x-text="caseData?.eval?.score?.toFixed(2) ?? '-'"></span></div>
-    <div class="text-xs"><span class="text-muted-foreground">结果</span>
+    <div class="text-xs"><span class="text-muted-foreground">Score</span> <span class="font-semibold ml-1" x-text="caseData?.eval?.score?.toFixed(2) ?? '-'"></span></div>
+    <div class="text-xs"><span class="text-muted-foreground">Result</span>
         <span class="font-semibold ml-1"
               :class="caseData?.eval?.result === 'pass' ? 'text-green-600 dark:text-green-400' : caseData?.eval?.result === 'fail' ? 'text-red-500' : 'text-blue-600 dark:text-blue-400'"
               x-text="caseData?.eval?.result ?? '-'"></span>
     </div>
-    <div class="text-xs" x-show="caseData?.start"><span class="text-muted-foreground">耗时</span> <span class="font-medium ml-1" x-text="calcDuration(caseData)"></span></div>
-    <div class="text-xs" x-show="caseData?.cost"><span class="text-muted-foreground">费用</span> <span class="font-medium ml-1" x-text="caseCostLabel(caseData)"></span></div>
+    <div class="text-xs" x-show="caseData?.start"><span class="text-muted-foreground">Duration</span> <span class="font-medium ml-1" x-text="calcDuration(caseData)"></span></div>
+    <div class="text-xs" x-show="caseData?.cost"><span class="text-muted-foreground">Cost</span> <span class="font-medium ml-1" x-text="caseCostLabel(caseData)"></span></div>
 </div>
 
-<!-- Agent 配置 -->
+<!-- Agent Config -->
 <div x-show="caseData?.target_config || caseData?.eval_config">
-    <div class="text-xs font-medium text-muted-foreground mb-1.5">Agent 配置</div>
+    <div class="text-xs font-medium text-muted-foreground mb-1.5">Agent Config</div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <!-- Target 配置 -->
+        <!-- Target Config -->
         <div x-show="caseData?.target_config && _configEntries(caseData.target_config).length > 0"
              class="rounded-lg bg-card border border-border px-3 py-2.5">
             <div class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5"
@@ -31,7 +31,7 @@
                 </template>
             </div>
         </div>
-        <!-- Eval 配置 -->
+        <!-- Eval Config -->
         <div x-show="caseData?.eval_config && _configEntries(caseData.eval_config).length > 0"
              class="rounded-lg bg-card border border-border px-3 py-2.5">
             <div class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5"
@@ -50,16 +50,16 @@
 
 <!-- Cost breakdown table -->
 <div x-show="caseData?.cost && _caseCostRows(caseData).length > 0">
-    <div class="text-xs font-medium text-muted-foreground mb-1.5">费用明细</div>
+    <div class="text-xs font-medium text-muted-foreground mb-1.5">Cost Breakdown</div>
     <div class="rounded-lg bg-card border border-border overflow-hidden">
         <table class="w-full text-xs">
             <thead>
                 <tr class="border-b border-border bg-muted/30">
-                    <th class="px-3 py-1.5 text-left font-medium text-muted-foreground">角色</th>
-                    <th class="px-3 py-1.5 text-left font-medium text-muted-foreground">模型</th>
+                    <th class="px-3 py-1.5 text-left font-medium text-muted-foreground">Role</th>
+                    <th class="px-3 py-1.5 text-left font-medium text-muted-foreground">Model</th>
                     <th class="px-3 py-1.5 text-right font-medium text-muted-foreground">Input</th>
                     <th class="px-3 py-1.5 text-right font-medium text-muted-foreground">Output</th>
-                    <th class="px-3 py-1.5 text-right font-medium text-muted-foreground">费用</th>
+                    <th class="px-3 py-1.5 text-right font-medium text-muted-foreground">Cost</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-border/50">
@@ -75,7 +75,7 @@
             </tbody>
             <tfoot>
                 <tr class="border-t border-border bg-muted/30 font-medium">
-                    <td class="px-3 py-1.5" colspan="2">合计</td>
+                    <td class="px-3 py-1.5" colspan="2">Total</td>
                     <td class="px-3 py-1.5 text-right tabular-nums" x-text="_caseCostTotalTokens(caseData, 'input').toLocaleString()"></td>
                     <td class="px-3 py-1.5 text-right tabular-nums" x-text="_caseCostTotalTokens(caseData, 'output').toLocaleString()"></td>
                     <td class="px-3 py-1.5 text-right tabular-nums" x-text="caseCostLabel(caseData)"></td>
@@ -87,22 +87,22 @@
 
 <!-- Feedback -->
 <div x-show="caseData?.eval?.feedback">
-    <div class="text-xs font-medium text-muted-foreground mb-1.5">评估反馈</div>
+    <div class="text-xs font-medium text-muted-foreground mb-1.5">Evaluation Feedback</div>
     <div class="rounded-lg bg-card border border-border px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap"
          x-text="caseData?.eval?.feedback"></div>
 </div>
 
 <!-- Dialogue -->
 <div x-show="getCaseDialogue(caseData).length > 0">
-    <div class="text-xs font-medium text-muted-foreground mb-2">对话记录</div>
+    <div class="text-xs font-medium text-muted-foreground mb-2">Dialogue</div>
     <div class="space-y-2.5">
         <template x-for="(msg, mi) in getCaseDialogue(caseData)" :key="mi">
             <div>
-                <!-- 历史对话与评测对话之间的分割线 -->
+                <!-- Divider between history and evaluation dialogue -->
                 <div x-show="!msg.isHistory && mi > 0 && getCaseDialogue(caseData)[mi - 1]?.isHistory"
                      class="flex items-center gap-3 my-3">
                     <div class="flex-1 border-t border-dashed border-border"></div>
-                    <span class="text-[10px] text-muted-foreground shrink-0">以上为历史对话</span>
+                    <span class="text-[10px] text-muted-foreground shrink-0">History above</span>
                     <div class="flex-1 border-t border-dashed border-border"></div>
                 </div>
                 <div class="flex gap-3" :class="msg.isHistory ? 'opacity-60' : ''">
@@ -116,7 +116,7 @@
                          :class="msg.role === 'user'
                              ? (msg.isHistory ? 'bg-blue-50/50 dark:bg-blue-950/15 border border-dashed border-blue-200 dark:border-blue-900/60' : 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900')
                              : (msg.isHistory ? 'bg-card/50 border border-dashed border-border' : 'bg-card border border-border')">
-                        <!-- Tool Calls（折叠展示） -->
+                        <!-- Tool Calls (collapsible) -->
                         <template x-if="msg.tool_calls && msg.tool_calls.length > 0">
                             <div x-data="{ showTools: false }" class="mb-2">
                                 <button @click="showTools = !showTools"
@@ -124,7 +124,7 @@
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17l-5.25-5.25m0 0l5.25-5.25m-5.25 5.25h12"/>
                                     </svg>
-                                    <span x-text="(showTools ? '隐藏' : '查看') + ' ' + msg.tool_calls.length + ' 次工具调用'"></span>
+                                    <span x-text="(showTools ? 'Hide' : 'Show') + ' ' + msg.tool_calls.length + ' tool call' + (msg.tool_calls.length > 1 ? 's' : '')"></span>
                                 </button>
                                 <div x-show="showTools" x-transition class="mt-1.5 space-y-1.5">
                                     <template x-for="(tc, ti) in msg.tool_calls" :key="ti">
@@ -155,7 +155,7 @@
 <div x-data="{ showRaw: false }">
     <button @click="showRaw = !showRaw" class="agent-detail-toggle">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/></svg>
-        <span x-text="showRaw ? '隐藏 JSON' : '查看原始数据'"></span>
+        <span x-text="showRaw ? 'Hide JSON' : 'View Raw Data'"></span>
     </button>
     <pre x-show="showRaw" x-transition class="code-block text-xs whitespace-pre-wrap max-h-96 overflow-y-auto mt-2"
          x-text="JSON.stringify(caseData, null, 2)"></pre>

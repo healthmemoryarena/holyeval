@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Agent 注册表 - HolyEval{% endblock %}
+{% block title %}Agent Registry - HolyEval{% endblock %}
 
 {% block content %}
 <div x-data="agentRegistry()" x-init="init()">
     <div class="mb-6">
-        <h1 class="text-2xl font-semibold tracking-tight">Agent 注册表</h1>
-        <p class="text-sm text-muted-foreground mt-1">查看已注册的被测系统和评测逻辑，所有信息从代码中读取</p>
+        <h1 class="text-2xl font-semibold tracking-tight">Agent Registry</h1>
+        <p class="text-sm text-muted-foreground mt-1">View registered agents, all info derived from code</p>
     </div>
 
     <!-- Tabs -->
@@ -13,19 +13,19 @@
         <button @click="tab = 'target'"
                 :class="tab === 'target' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
                 class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
-            被测系统
+            Target
             <span class="ml-1 badge badge-secondary text-xs" x-text="targetAgents.length"></span>
         </button>
         <button @click="tab = 'eval'"
                 :class="tab === 'eval' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
                 class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
-            评测逻辑
+            Evaluator
             <span class="ml-1 badge badge-secondary text-xs" x-text="evalAgents.length"></span>
         </button>
         <button @click="tab = 'test'"
                 :class="tab === 'test' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
                 class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
-            虚拟用户
+            Test Agent
             <span class="ml-1 badge badge-secondary text-xs" x-text="testAgents.length"></span>
         </button>
     </div>
@@ -51,13 +51,13 @@
                         <button @click="showSchema = !showSchema"
                                 class="h-8 px-3 rounded-md border text-xs font-medium hover:bg-secondary transition-colors"
                                 :class="showSchema && 'bg-secondary'">
-                            配置 Schema
+                            Config Schema
                         </button>
                         <button @click="showExamples = !showExamples"
                                 x-show="agent.config_examples.length > 0"
                                 class="h-8 px-3 rounded-md border text-xs font-medium hover:bg-secondary transition-colors"
                                 :class="showExamples && 'bg-secondary'">
-                            配置示例
+                            Config Example
                         </button>
                     </div>
 
@@ -67,10 +67,10 @@
                             <table class="w-full text-sm" x-show="agent.config_schema.properties">
                                 <thead>
                                     <tr class="bg-muted/50 border-b">
-                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">字段</th>
-                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">类型</th>
-                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">必填</th>
-                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">描述</th>
+                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">Field</th>
+                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">Type</th>
+                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">Required</th>
+                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">Description</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y">

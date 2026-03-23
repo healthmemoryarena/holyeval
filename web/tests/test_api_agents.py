@@ -1,11 +1,11 @@
-"""Agents API 测试"""
+"""Agents API tests"""
 
 import pytest
 
 
 @pytest.mark.asyncio
 async def test_list_target_agents(client):
-    """GET /api/agents/target 返回 TargetAgent 列表"""
+    """GET /api/agents/target returns TargetAgent list"""
     resp = await client.get("/api/agents/target")
     assert resp.status_code == 200
     data = resp.json()
@@ -18,7 +18,7 @@ async def test_list_target_agents(client):
 
 @pytest.mark.asyncio
 async def test_list_eval_agents(client):
-    """GET /api/agents/eval 返回 EvalAgent 列表"""
+    """GET /api/agents/eval returns EvalAgent list"""
     resp = await client.get("/api/agents/eval")
     assert resp.status_code == 200
     data = resp.json()
@@ -31,7 +31,7 @@ async def test_list_eval_agents(client):
 
 @pytest.mark.asyncio
 async def test_list_test_agents(client):
-    """GET /api/agents/test 返回 TestAgent 列表"""
+    """GET /api/agents/test returns TestAgent list"""
     resp = await client.get("/api/agents/test")
     assert resp.status_code == 200
     data = resp.json()
@@ -44,7 +44,7 @@ async def test_list_test_agents(client):
 
 @pytest.mark.asyncio
 async def test_agent_info_fields(client):
-    """验证 AgentInfo 字段完整性"""
+    """Verify AgentInfo field completeness"""
     resp = await client.get("/api/agents/eval")
     assert resp.status_code == 200
     for agent in resp.json():

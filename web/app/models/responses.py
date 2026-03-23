@@ -1,4 +1,4 @@
-"""API 响应模型"""
+"""API response models"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-# 共享数据模型（从 evaluator 核心层 re-export）
+# Shared data models (re-exported from evaluator core layer)
 from evaluator.core.bench_schema import ApiCallResult  # noqa: F401
 from evaluator.core.schema import (  # noqa: F401
     AgentInfo,
@@ -20,14 +20,14 @@ from evaluator.core.schema import (  # noqa: F401
 )
 
 
-# ==================== Task（Web 专用）====================
+# ==================== Task (Web-specific) ====================
 
 
 class TaskCreateRequest(BaseModel):
     benchmark: str
     dataset: str
-    target_type: str | None = None  # 目标系统类型（多 target 时指定，如 "llm_api"）
-    target: dict[str, Any] | None = None  # 前端传入 target 配置（editable 字段覆盖）
+    target_type: str | None = None  # Target system type (specify for multi-target, e.g. "llm_api")
+    target: dict[str, Any] | None = None  # Target config from frontend (overrides editable fields)
     ids: str | None = None
     limit: int | None = None
     max_concurrency: int = 3
@@ -37,8 +37,8 @@ class TaskSummary(BaseModel):
     task_id: str
     benchmark: str
     dataset: str
-    target_type: str | None = None  # 被测系统类型（eval-only 模式为 None）
-    target_model: str | None = None  # 被测系统模型（可选）
+    target_type: str | None = None  # Target system type (None in eval-only mode)
+    target_model: str | None = None  # Target system model (optional)
     status: str  # pending | running | completed | cancelled | error
     total: int
     completed: int
@@ -49,7 +49,7 @@ class TaskDetail(BaseModel):
     task_id: str
     benchmark: str
     dataset: str
-    runtime_target: dict[str, Any] | None = None  # runtime_target 配置（eval-only 模式为 None）
+    runtime_target: dict[str, Any] | None = None  # Runtime target config (None in eval-only mode)
     status: str
     total: int
     completed: int
@@ -58,10 +58,10 @@ class TaskDetail(BaseModel):
     cases: dict[str, Any]
     stats_by_tag: dict[str, Any] | None = None
     report_path: str | None = None
-    report_summary: dict[str, Any] | None = None  # eval-only 完成后的报告摘要
+    report_summary: dict[str, Any] | None = None  # Report summary after eval-only completion
 
 
-# ==================== Eval-Only（Web 专用）====================
+# ==================== Eval-Only (Web-specific) ====================
 
 
 class EvalCheckRequest(BaseModel):
@@ -74,12 +74,12 @@ class EvalCheckResponse(BaseModel):
     benchmark: str
     dataset: str
     benchmark_description: str = ""
-    dataset_total: int  # 数据集总条数
-    submitted: int  # 提交的结果条数
-    matched: int  # ID 匹配成功的条数
-    missed_ids: list[str] = []  # 数据集中有但提交中缺失的 ID（最多 50 条）
-    extra_ids: list[str] = []  # 提交中有但数据集中不存在的 ID
-    tag_distribution: dict[str, int] = {}  # 匹配用例的 tag 分布
+    dataset_total: int  # Total cases in dataset
+    submitted: int  # Number of submitted results
+    matched: int  # Number of ID matches
+    missed_ids: list[str] = []  # IDs in dataset but missing from submission (max 50)
+    extra_ids: list[str] = []  # IDs in submission but not in dataset
+    tag_distribution: dict[str, int] = {}  # Tag distribution of matched cases
 
 
 class EvalOnlyRequest(BaseModel):
@@ -92,23 +92,23 @@ class EvalOnlyRequest(BaseModel):
 class EvalOnlyResponse(BaseModel):
     task_id: str
     status: str
-    total: int  # 匹配成功的评测条数
-    dataset_total: int  # 数据集总条数
-    submitted: int  # 提交的结果条数
-    matched: int  # ID 匹配成功的条数
-    missed_ids: list[str] = []  # 数据集中有但提交中缺失的 ID（最多 50 条）
-    extra_ids: list[str] = []  # 提交中有但数据集中不存在的 ID
+    total: int  # Number of matched evaluation cases
+    dataset_total: int  # Total cases in dataset
+    submitted: int  # Number of submitted results
+    matched: int  # Number of ID matches
+    missed_ids: list[str] = []  # IDs in dataset but missing from submission (max 50)
+    extra_ids: list[str] = []  # IDs in submission but not in dataset
     created_at: datetime
 
 
-# ==================== Report（Web 专用）====================
+# ==================== Report (Web-specific) ====================
 
 
 class ReportListResponse(BaseModel):
     reports: list[ReportEntry]
 
 
-# ==================== Checkpoint（Web 专用）====================
+# ==================== Checkpoint (Web-specific) ====================
 
 
 class CheckpointSummary(BaseModel):
@@ -116,6 +116,6 @@ class CheckpointSummary(BaseModel):
     benchmark: str
     dataset: str
     target_type: str
-    case_count: int  # 总用例数
-    completed_count: int  # 已完成数
+    case_count: int  # Total number of cases
+    completed_count: int  # Number of completed cases
     started_at: str

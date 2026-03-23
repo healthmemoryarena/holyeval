@@ -1,4 +1,4 @@
-"""FastAPI 应用工厂 + 路由注册"""
+"""FastAPI app factory + route registration"""
 
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-# 触发插件注册
+# Trigger plugin registration
 import evaluator.plugin.eval_agent  # noqa: F401
 import evaluator.plugin.target_agent  # noqa: F401
 import evaluator.plugin.test_agent  # noqa: F401
@@ -24,10 +24,10 @@ templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时：扫描并运行 benchmark 准备脚本（非阻塞，后台执行）
+    # On startup: scan and run benchmark prepare scripts (non-blocking, background)
     await prepare_manager.start_all()
     yield
-    # 关闭时取消所有活跃任务和准备脚本
+    # On shutdown: cancel all active tasks and prepare scripts
     task_manager.cancel_all()
     prepare_manager.cancel_all()
 
@@ -35,22 +35,22 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="HolyEval Web UI", lifespan=lifespan)
 
-    # 静态文件
+    # Static files
     app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
 
-    # K8s 健康检查探针
+    # K8s health check probe
     @app.get("/api/health")
     async def health():
         return JSONResponse({"status": "ok"})
 
-    # API 路由
+    # API routes
     app.include_router(benchmarks.router, prefix="/api")
     app.include_router(agents.router, prefix="/api")
     app.include_router(tasks.router, prefix="/api")
     app.include_router(reports.router, prefix="/api")
     app.include_router(guides.router, prefix="/api")
 
-    # 页面路由
+    # Page routes
     @app.get("/")
     async def index(request: Request):
         return templates.TemplateResponse("tasks/index.html", {"request": request, "nav": "tasks"})

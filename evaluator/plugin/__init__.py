@@ -1,8 +1,8 @@
 """
-plugin — 插件实现
+plugin — Plugin implementations
 
-实现 core/interfaces 中定义的抽象接口：
-- eval_agent/    评估代理
-- target_agent/  被测目标代理
-- test_agent/    虚拟用户代理
+Implements abstract interfaces defined in core/interfaces:
+- eval_agent/    Evaluation agents
+- target_agent/  Target agents (system under test)
+- test_agent/    Test agents (virtual users)
 """

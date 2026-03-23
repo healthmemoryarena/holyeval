@@ -1,4 +1,4 @@
-"""python -m web — 启动 HolyEval Web UI"""
+"""python -m web — start HolyEval Web UI"""
 
 import logging
 import os
@@ -10,7 +10,7 @@ LOG_FILE = "web.log"
 
 
 def _setup_logging():
-    """配置日志同时输出到终端和文件"""
+    """Configure logging to both terminal and file"""
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
 
@@ -29,10 +29,10 @@ def _setup_logging():
 
 def main():
     _setup_logging()
-    logging.getLogger(__name__).info("Web UI 启动，日志文件: %s", LOG_FILE)
+    logging.getLogger(__name__).info("Web UI started, log file: %s", LOG_FILE)
 
     port = int(os.environ.get("HOLYEVAL_WEB_PORT", 8000))
-    # 生产/容器环境禁用 reload（K8s 中文件不变，reload 无意义且影响信号处理）
+    # Disable reload in production/container (files don't change in K8s, reload is unnecessary and affects signal handling)
     reload = os.environ.get("HOLYEVAL_RELOAD", "false").lower() == "true"
     uvicorn.run(
         "web.app.main:create_app",

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}评测详情 - HolyEval{% endblock %}
+{% block title %}Task Detail - HolyEval{% endblock %}
 
 {% block content %}
 <div x-data="taskDetail('{{ task_id }}')" x-init="init()">
@@ -19,25 +19,25 @@
         <template x-if="task.report_path">
             <a :href="reportPageUrl" class="sh-btn sh-btn-secondary gap-1.5 text-xs">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
-                查看报告
+                View Report
             </a>
         </template>
         <button x-show="task.status === 'running'" @click="cancelTask()" class="sh-btn sh-btn-destructive gap-1.5">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z"/></svg>
-            取消任务
+            Cancel Task
         </button>
     </div>
 
-    <!-- Stats cards — 与 reports/detail.html 一致 -->
+    <!-- Stats cards -->
     <div class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-5">
         <div class="rounded-lg border border-border bg-card p-4">
-            <div class="text-xs text-muted-foreground mb-1">进度</div>
+            <div class="text-xs text-muted-foreground mb-1">Progress</div>
             <div class="text-2xl font-semibold" x-text="task.total > 0 ? Math.round(task.completed / task.total * 100) + '%' : '0%'"></div>
-            <div class="text-xs text-muted-foreground mt-1" x-text="task.completed + ' / ' + task.total + ' 条'"></div>
+            <div class="text-xs text-muted-foreground mt-1" x-text="task.completed + ' / ' + task.total"></div>
         </div>
         <div class="rounded-lg border border-border bg-card p-4">
             <div class="text-xs text-muted-foreground mb-1" x-text="stats.hasJudged ? 'Pass Rate' : 'Scored'"></div>
-            <div class="text-2xl font-semibold" x-text="stats.hasJudged ? stats.passRate : stats.scored + ' 条'"></div>
+            <div class="text-2xl font-semibold" x-text="stats.hasJudged ? stats.passRate : stats.scored"></div>
             <div x-show="stats.hasJudged" class="text-xs text-muted-foreground mt-1" x-text="stats.pass + ' pass / ' + stats.fail + ' fail'"></div>
         </div>
         <div class="rounded-lg border border-border bg-card p-4">
@@ -45,11 +45,11 @@
             <div class="text-2xl font-semibold" x-text="stats.avgScore"></div>
         </div>
         <div class="rounded-lg border border-border bg-card p-4">
-            <div class="text-xs text-muted-foreground mb-1">耗时</div>
+            <div class="text-xs text-muted-foreground mb-1">Duration</div>
             <div class="text-2xl font-semibold" x-text="stats.totalDuration"></div>
         </div>
         <div class="rounded-lg border border-border bg-card p-4">
-            <div class="text-xs text-muted-foreground mb-1">总费用</div>
+            <div class="text-xs text-muted-foreground mb-1">Total Cost</div>
             <div class="text-2xl font-semibold" x-text="stats.totalCostLabel"></div>
             <div class="text-xs text-muted-foreground mt-1" x-show="stats.totalTokens > 0" x-text="stats.totalTokens.toLocaleString() + ' tokens'"></div>
         </div>
@@ -66,9 +66,9 @@
         </div>
     </div>
 
-    <!-- 执行配置 — 与 reports/detail.html 一致 -->
+    <!-- Run Config -->
     <div class="rounded-lg border border-border bg-card p-5 mb-5">
-        <h3 class="text-sm font-medium mb-3">执行配置</h3>
+        <h3 class="text-sm font-medium mb-3">Run Config</h3>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-xs">
             <template x-for="f in meta.targetFields" :key="f.label">
                 <div>
@@ -82,37 +82,37 @@
                 <div class="font-medium mt-0.5" x-text="meta.evalType || '—'"></div>
             </div>
             <div>
-                <span class="text-muted-foreground">并发数</span>
+                <span class="text-muted-foreground">Concurrency</span>
                 <div class="font-medium mt-0.5" x-text="meta.concurrency || '—'"></div>
             </div>
         </div>
         <!-- Cost breakdown -->
         <div x-show="stats.totalTokens > 0" class="flex flex-wrap gap-4 mt-3 pt-3 border-t border-border text-xs">
             <div x-show="stats.costByRole.targetVal > 0">
-                <span class="text-muted-foreground">Target 费用</span>
+                <span class="text-muted-foreground">Target Cost</span>
                 <span class="font-medium ml-1" x-text="stats.costByRole.target"></span>
             </div>
             <div x-show="stats.costByRole.evalVal > 0">
-                <span class="text-muted-foreground">Eval 费用</span>
+                <span class="text-muted-foreground">Eval Cost</span>
                 <span class="font-medium ml-1" x-text="stats.costByRole.eval"></span>
             </div>
             <div x-show="stats.costByRole.testVal > 0">
-                <span class="text-muted-foreground">Test 费用</span>
+                <span class="text-muted-foreground">Test Cost</span>
                 <span class="font-medium ml-1" x-text="stats.costByRole.test"></span>
             </div>
         </div>
     </div>
 
-    <!-- Tag 统计 -->
+    <!-- Tag stats -->
     <div x-data="{ get tagStats() { return task.stats_by_tag || {} } }">
         {% include "partials/tag_stats.html" %}
     </div>
 
-    <!-- Case list — 与 reports/detail.html 一致 -->
+    <!-- Case list -->
     <div class="rounded-lg border border-border bg-card">
         <div class="px-5 py-3 border-b border-border flex flex-wrap items-center gap-2">
-            <h2 class="text-sm font-medium">用例列表</h2>
-            <span class="text-xs text-muted-foreground" x-text="filteredEntries.length + ' / ' + caseEntries.length + ' 条'"></span>
+            <h2 class="text-sm font-medium">Case List</h2>
+            <span class="text-xs text-muted-foreground" x-text="filteredEntries.length + ' / ' + caseEntries.length"></span>
 
             <!-- Tag filters -->
             <template x-for="cat in Object.keys(tagCategories).sort()" :key="cat">
@@ -127,7 +127,7 @@
                          class="absolute z-50 mt-1 left-0 min-w-[120px] rounded-md border border-border bg-popover py-1 shadow-md">
                         <button @click="setTagFilter(cat, ''); page = 1; open = false"
                                 class="block w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted transition-colors"
-                                :class="!selectedTags[cat] ? 'text-primary font-medium' : ''">全部</button>
+                                :class="!selectedTags[cat] ? 'text-primary font-medium' : ''">All</button>
                         <template x-for="val in tagCategories[cat]" :key="val">
                             <button @click="setTagFilter(cat, val); page = 1; open = false"
                                     class="block w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted transition-colors"
@@ -142,12 +142,12 @@
                 <button @click="open = !open"
                         class="inline-flex items-center gap-1 text-[11px] border border-border rounded-md px-2 py-1 bg-background hover:bg-muted transition-colors"
                         :class="filter !== 'all' ? 'border-primary/50 text-primary' : ''">
-                    <span x-text="filter === 'all' ? '状态' : {pass:'Pass',fail:'Fail',scored:'Scored'}[filter]"></span>
+                    <span x-text="filter === 'all' ? 'Status' : {pass:'Pass',fail:'Fail',scored:'Scored'}[filter]"></span>
                     <svg class="w-3 h-3 opacity-50" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                 </button>
                 <div x-show="open" x-transition.opacity.duration.100ms
                      class="absolute z-50 mt-1 left-0 min-w-[80px] rounded-md border border-border bg-popover py-1 shadow-md">
-                    <template x-for="f in [{key:'all',label:'全部'},{key:'pass',label:'Pass'},{key:'fail',label:'Fail'},{key:'scored',label:'Scored'}]" :key="f.key">
+                    <template x-for="f in [{key:'all',label:'All'},{key:'pass',label:'Pass'},{key:'fail',label:'Fail'},{key:'scored',label:'Scored'}]" :key="f.key">
                         <button @click="filter = f.key; page = 1; open = false"
                                 class="block w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted transition-colors"
                                 :class="filter === f.key ? 'text-primary font-medium' : ''" x-text="f.label"></button>
@@ -157,7 +157,7 @@
 
             <button x-show="Object.keys(selectedTags).length > 0 || filter !== 'all'"
                     @click="selectedTags = {}; filter = 'all'; page = 1"
-                    class="text-[11px] text-muted-foreground hover:text-foreground transition-colors">清除筛选</button>
+                    class="text-[11px] text-muted-foreground hover:text-foreground transition-colors">Clear Filters</button>
 
             <div class="flex-1"></div>
 
@@ -165,7 +165,7 @@
             <div class="relative" x-data="{ open: false }" @click.outside="open = false">
                 <button @click="open = !open"
                         class="inline-flex items-center gap-1 text-[11px] border border-border rounded-md px-2 py-1 bg-background hover:bg-muted transition-colors">
-                    <span x-text="pageSize + '/页'"></span>
+                    <span x-text="pageSize + '/page'"></span>
                     <svg class="w-3 h-3 opacity-50" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                 </button>
                 <div x-show="open" x-transition.opacity.duration.100ms
@@ -173,7 +173,7 @@
                     <template x-for="s in [20, 50, 100]" :key="s">
                         <button @click="pageSize = s; page = 1; open = false"
                                 class="block w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted transition-colors"
-                                :class="pageSize === s ? 'text-primary font-medium' : ''" x-text="s + '/页'"></button>
+                                :class="pageSize === s ? 'text-primary font-medium' : ''" x-text="s + '/page'"></button>
                     </template>
                 </div>
             </div>
@@ -194,7 +194,7 @@
                                   :class="info.eval_result === 'pass' ? 'badge-success' : info.eval_result === 'fail' ? 'badge-destructive' : info.eval_result === 'scored' ? 'badge-scored' : 'status-' + info.status"
                                   x-text="info.eval_result || info.status"></span>
                             <span class="text-xs text-muted-foreground truncate flex-1 min-w-0" x-text="info.title || getCaseTitle(caseId)"></span>
-                            <span class="text-xs text-muted-foreground shrink-0" x-text="(info.turn || '-') + ' 轮'"></span>
+                            <span class="text-xs text-muted-foreground shrink-0" x-text="(info.turn || '-') + ' turns'"></span>
                             <span class="text-xs font-medium shrink-0" x-text="info.score != null ? info.score.toFixed(2) : '-'"></span>
                             <span class="text-xs text-muted-foreground shrink-0 tabular-nums" x-text="caseCostLabel(getCaseReport(caseId), info)"></span>
                             <span x-show="info.error && !info.eval_result" class="text-xs text-destructive truncate max-w-[200px] shrink-0" x-text="info.error"></span>
@@ -206,23 +206,23 @@
                         </div>
                     </div>
 
-                    <!-- Expanded detail — 使用共享模板 -->
+                    <!-- Expanded detail -->
                     <div x-show="expandedCase === caseId" x-transition.opacity class="border-t border-border bg-muted/30">
-                        <!-- Loading（仅在无数据时展示，不依赖全局 reportLoading） -->
+                        <!-- Loading (shown only when no data, independent of global reportLoading) -->
                         <div x-show="!getCaseReport(caseId)" class="px-8 py-6 text-center text-sm text-muted-foreground">
                             <template x-if="!info.error">
                                 <div>
                                     <svg class="w-5 h-5 mx-auto mb-2 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                    加载详情...
+                                    Loading...
                                 </div>
                             </template>
                             <div x-show="info.error" class="text-sm text-destructive" x-text="info.error"></div>
                         </div>
 
-                        <!-- Live 指示器 -->
+                        <!-- Live indicator -->
                         <div x-show="getCaseReport(caseId)?._live" class="px-8 pt-4 flex items-center gap-2">
                             <span class="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-                            <span class="text-xs text-muted-foreground">对话进行中...</span>
+                            <span class="text-xs text-muted-foreground">In progress...</span>
                         </div>
 
                         <div x-show="getCaseReport(caseId)" class="px-8 py-5 space-y-4"
@@ -236,7 +236,7 @@
         </div>
         <!-- Pagination controls -->
         <div x-show="totalPages > 1" class="px-5 py-3 border-t border-border flex items-center justify-between">
-            <div class="text-xs text-muted-foreground" x-text="'第 ' + ((page-1)*pageSize+1) + '-' + Math.min(page*pageSize, filteredEntries.length) + ' 条'"></div>
+            <div class="text-xs text-muted-foreground" x-text="((page-1)*pageSize+1) + '-' + Math.min(page*pageSize, filteredEntries.length)"></div>
             <div class="flex items-center gap-1">
                 <button @click="page = 1" :disabled="page <= 1"
                         class="px-2 py-1 text-xs rounded border border-border hover:bg-muted disabled:opacity-30 disabled:pointer-events-none">«</button>
@@ -341,7 +341,7 @@ function taskDetail(taskId) {
         async pollTask() {
             await this.refreshTask();
 
-            // 清除刚完成用例的 live 数据，重新拉取完整结果
+            // Clear live data for just-completed cases and re-fetch full results
             for (const [caseId, info] of Object.entries(this.task.cases || {})) {
                 if (['completed', 'error', 'cancelled'].includes(info.status) && this._liveIndex[caseId]?._live) {
                     delete this._liveIndex[caseId];
@@ -349,7 +349,7 @@ function taskDetail(taskId) {
                 }
             }
 
-            // 自动刷新展开的执行中用例
+            // Auto-refresh expanded running cases
             if (this.expandedCase) {
                 const info = this.task.cases[this.expandedCase];
                 if (info && !['completed', 'error', 'cancelled'].includes(info.status)) {
@@ -374,7 +374,7 @@ function taskDetail(taskId) {
 
         updateMeta() {
             this._buildTargetFields(this.task.runtime_target);
-            // 推断 evaluator 类型和并发数
+            // Infer evaluator type and concurrency
             const evalTypes = new Set(Object.values(this.task.cases || {}).map(c => c.eval_type).filter(Boolean));
             this.meta.evalType = [...evalTypes].join(', ') || '—';
             this.meta.concurrency = this.task.max_concurrency || '—';
@@ -391,10 +391,10 @@ function taskDetail(taskId) {
             this.stats.avgScore = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2) : '-';
             this.stats.passRate = judged > 0 ? (this.stats.pass / judged * 100).toFixed(1) + '%' : '-';
 
-            // 耗时: 从报告或 snapshot 计算
+            // Duration: compute from report or snapshot
             this._updateDuration();
 
-            // 费用: 从报告或 snapshot 聚合
+            // Cost: aggregate from report or snapshot
             const costSources = this._getCostSources();
             if (costSources.length === 0) {
                 this.stats.totalCostLabel = '—';
@@ -409,7 +409,7 @@ function taskDetail(taskId) {
         },
 
         _updateDuration() {
-            // 从 report cases 计算耗时范围
+            // Compute duration range from report cases
             const caseList = this.reportData?.cases || [];
             const times = caseList.filter(c => c.start && c.end).map(c => ({
                 start: new Date(c.start), end: new Date(c.end),
@@ -436,14 +436,14 @@ function taskDetail(taskId) {
             return costs;
         },
 
-        /* ---- Target 字段动态展示 ---- */
+        /* ---- Dynamic target fields ---- */
         _buildTargetFields(rt) {
             this.meta.targetFields = [];
             if (!rt) return;
             const labelMap = {
-                type: 'Target 类型', model: '模型', system_prompt: 'System Prompt',
-                email: 'Email', agent: 'Agent', language: '语言',
-                code: 'Code', timezone: '时区',
+                type: 'Target Type', model: 'Model', system_prompt: 'System Prompt',
+                email: 'Email', agent: 'Agent', language: 'Language',
+                code: 'Code', timezone: 'Timezone',
             };
             for (const [key, label] of Object.entries(labelMap)) {
                 if (rt[key] != null && rt[key] !== '') {
@@ -452,15 +452,15 @@ function taskDetail(taskId) {
             }
         },
 
-        /* ---- 单条 case 费用 ---- */
+        /* ---- Per-case cost ---- */
         caseCostLabel(c, info) {
-            // 优先从完整 result 计算；未展开时 fallback 到 snapshot 的 cost
+            // Prefer full result; fall back to snapshot cost when not expanded
             if (c) return _formatCost(_caseCost(c));
             if (info?.cost) return _formatCost(_caseCost(info));
             return '—';
         },
 
-        /* ---- 对话 & 辅助（与 reports/detail.html 保持一致） ---- */
+        /* ---- Dialogue & helpers ---- */
         async loadReport() {
             if (!this.task.report_path || this.reportData) return;
             this.reportLoading = true;
@@ -472,7 +472,7 @@ function taskDetail(taskId) {
                     for (const c of (this.reportData.cases || [])) {
                         if (c.id) this._reportIndex[c.id] = c;
                     }
-                    // 报告可能包含并发数
+                    // Report may include concurrency
                     if (this.reportData.max_concurrency) this.meta.concurrency = this.reportData.max_concurrency;
                     this.updateStats();
                 }
@@ -526,7 +526,7 @@ function taskDetail(taskId) {
             if (!caseData) return [];
             const dialogue = [];
 
-            // 评测前的历史对话（来自 eval.trace.history）
+            // Pre-evaluation history (from eval.trace.history)
             const history = caseData.eval?.trace?.history || [];
             for (const msg of history) {
                 const role = msg.type === 'human' ? 'user' : 'target';
@@ -535,7 +535,7 @@ function taskDetail(taskId) {
                 }
             }
 
-            // 评测对话（来自 test_memory）
+            // Evaluation dialogue (from test_memory)
             const testMemory = caseData.eval?.trace?.test_memory || [];
             for (const mem of testMemory) {
                 const action = mem.test_reaction?.action;
@@ -544,7 +544,7 @@ function taskDetail(taskId) {
                     if (text) {
                         dialogue.push({
                             role: 'user', content: text,
-                            time: mem.test_reaction_time ? new Date(mem.test_reaction_time).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+                            time: mem.test_reaction_time ? new Date(mem.test_reaction_time).toLocaleTimeString('en-US', { hour12: false }) : '',
                         });
                     }
                 }
@@ -557,7 +557,7 @@ function taskDetail(taskId) {
                         dialogue.push({
                             role: 'target', content: text,
                             tool_calls: toolCalls,
-                            time: mem.target_response_time ? new Date(mem.target_response_time).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+                            time: mem.target_response_time ? new Date(mem.target_response_time).toLocaleTimeString('en-US', { hour12: false }) : '',
                         });
                     }
                 }
@@ -590,7 +590,7 @@ function taskDetail(taskId) {
         },
 
         async cancelTask() { await fetch(`/api/tasks/${this.taskId}/cancel`, { method: 'POST' }); },
-        formatTime(ts) { return ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : ''; },
+        formatTime(ts) { return ts ? new Date(ts).toLocaleString('en-US', { hour12: false }) : ''; },
         destroy() { if (this.pollTimer) clearInterval(this.pollTimer); }
     };
 }

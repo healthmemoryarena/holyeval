@@ -1,8 +1,8 @@
-"""test_agent — 测试代理（虚拟用户）插件，实现 AbstractTestAgent
+"""test_agent — Test agent (virtual user) plugins implementing AbstractTestAgent
 
-导入本模块会触发子类注册（__init_subclass__），使测试代理可通过名称查找:
-    AbstractTestAgent.get("auto")    -> AutoTestAgent   (LLM 驱动)
-    AbstractTestAgent.get("manual")  -> ManualTestAgent  (脚本驱动)
+Importing this module triggers subclass registration (__init_subclass__), enabling test agents to be looked up by name:
+    AbstractTestAgent.get("auto")    -> AutoTestAgent   (LLM-driven)
+    AbstractTestAgent.get("manual")  -> ManualTestAgent  (script-driven)
 """
 
 from evaluator.plugin.test_agent.auto_test_agent import AutoTestAgent

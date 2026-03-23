@@ -1,81 +1,81 @@
-# 开发被测系统（TargetAgent）
+# Developing a System Under Test (TargetAgent)
 
-> **在 Claude Code 中使用**: 输入 `/add-target-agent <agent-name>`，后跟你的被测系统描述（如 API 地址、认证方式、协议细节），Claude 会自动生成配置、实现和注册代码。
+> **Using in Claude Code**: Type `/add-target-agent <agent-name>`, followed by your system-under-test description (e.g., API endpoint, authentication method, protocol details). Claude will automatically generate the configuration, implementation, and registration code.
 
-## 概述
+## Overview
 
-TargetAgent 封装被测系统的接入层，负责将虚拟用户的输入发送给目标系统并获取响应。每种被测系统（HTTP API、SDK、GUI 等）对应一个 TargetAgent 插件。
+TargetAgent encapsulates the integration layer for the system under test, responsible for sending virtual user inputs to the target system and retrieving responses. Each type of system under test (HTTP API, SDK, GUI, etc.) corresponds to a TargetAgent plugin.
 
-## 现有被测系统
+## Existing Target Systems
 
-| 名称 | 说明 |
+| Name | Description |
 |------|------|
-| `theta_api` | Theta Health HTTP API，独立管理 session/token |
-| `llm_api` | 通用 LLM API（OpenAI / Gemini），基于 `do_execute` 统一 LLM 层 |
+| `theta_api` | Theta Health HTTP API, independently manages session/token |
+| `llm_api` | Generic LLM API (OpenAI / Gemini), based on the unified `do_execute` LLM layer |
 
-## 开发步骤
+## Development Steps
 
-### 1. 确定接入方式
+### 1. Determine the Integration Method
 
-- **HTTP API** — 最常见，通过 HTTP 请求与目标系统交互
-- **SDK/Client** — 使用目标系统提供的 Python SDK
-- **CLI** — 通过命令行调用目标系统
-- **LLM API** — 直接调用 LLM 提供商的 API
+- **HTTP API** — Most common, interacts with the target system via HTTP requests
+- **SDK/Client** — Uses the target system's Python SDK
+- **CLI** — Invokes the target system via command line
+- **LLM API** — Directly calls an LLM provider's API
 
-### 2. 定义配置模型
+### 2. Define the Configuration Model
 
-在 `evaluator/core/schema.py` 中新增配置：
+Add a configuration in `evaluator/core/schema.py`:
 
 ```python
 class MyTargetInfo(BaseModel):
-    """我的被测系统配置"""
+    """My target system configuration"""
     model_config = ConfigDict(extra="forbid")
 
     type: Literal["my_target"] = "my_target"
-    # 连接参数（建议基础设施参数放 .env，业务参数放配置）
+    # Connection parameters (infrastructure params should go in .env, business params in the config model)
 ```
 
-更新 `TargetInfo` 联合类型以包含新配置。
+Update the `TargetInfo` union type to include the new configuration.
 
-### 3. 实现 TargetAgent
+### 3. Implement the TargetAgent
 
-在 `evaluator/plugin/target_agent/` 创建实现文件：
+Create the implementation file in `evaluator/plugin/target_agent/`:
 
 ```python
 class MyTargetAgent(AbstractTargetAgent, name="my_target"):
     async def _generate_next_reaction(self, test_action):
-        # 1. 提取用户输入 test_action.semantic_content
-        # 2. 调用目标系统
-        # 3. 返回 TargetAgentReaction(type="message", message_list=[...])
+        # 1. Extract user input from test_action.semantic_content
+        # 2. Call the target system
+        # 3. Return TargetAgentReaction(type="message", message_list=[...])
 
     async def cleanup(self):
-        # 释放连接资源
+        # Release connection resources
 ```
 
-### 4. 注册插件
+### 4. Register the Plugin
 
-在 `evaluator/plugin/target_agent/__init__.py` 中导入新类。
+Import the new class in `evaluator/plugin/target_agent/__init__.py`.
 
-### 5. 验证
+### 5. Verify
 
 ```bash
 python -c "from evaluator.core.interfaces.abstract_target_agent import AbstractTargetAgent; print(AbstractTargetAgent.get_all())"
 ruff check evaluator/core/schema.py evaluator/plugin/target_agent/
 ```
 
-## 关键设计模式
+## Key Design Patterns
 
-- **懒初始化**: 首次调用时触发认证/建立连接
-- **响应格式**: `TargetAgentReaction(type="message", message_list=[{"content": "..."}])`
-- **资源清理**: 实现 `cleanup()` 方法释放网络连接
-- **环境变量**: 基础设施参数（base_url、timeout）放 `.env`，业务参数放配置模型
+- **Lazy initialization**: Authentication/connection setup is triggered on first call
+- **Response format**: `TargetAgentReaction(type="message", message_list=[{"content": "..."}])`
+- **Resource cleanup**: Implement the `cleanup()` method to release network connections
+- **Environment variables**: Infrastructure parameters (base_url, timeout) go in `.env`; business parameters go in the config model
 
-## 关键文件
+## Key Files
 
-| 文件 | 说明 |
+| File | Description |
 |------|------|
-| `evaluator/core/schema.py` | 配置模型定义 |
-| `evaluator/core/interfaces/abstract_target_agent.py` | 抽象接口 |
-| `evaluator/plugin/target_agent/` | 插件实现目录 |
-| `evaluator/plugin/target_agent/theta_api_target_agent.py` | HTTP API 参考实现 |
-| `evaluator/plugin/target_agent/llm_api_target_agent.py` | LLM API 参考实现 |
+| `evaluator/core/schema.py` | Configuration model definitions |
+| `evaluator/core/interfaces/abstract_target_agent.py` | Abstract interface |
+| `evaluator/plugin/target_agent/` | Plugin implementation directory |
+| `evaluator/plugin/target_agent/theta_api_target_agent.py` | HTTP API reference implementation |
+| `evaluator/plugin/target_agent/llm_api_target_agent.py` | LLM API reference implementation |

@@ -1,11 +1,11 @@
 """
-AutoTestAgent — 自动模式虚拟用户（LLM 驱动）
+AutoTestAgent — Auto-mode virtual user (LLM-driven)
 
-工作流程：
-1. 如果当前轮次还有 strict_inputs 没消费完 → 直接发送强制输入
-2. 否则 → 调用 LLM，让它扮演用户角色生成下一句话
+Workflow:
+1. If there are remaining strict_inputs for the current turn -> send forced input directly
+2. Otherwise -> call LLM to generate the next user utterance in character
 
-LLM 会根据 goal / context / finish_condition 和对话历史来决定说什么、是否结束。
+LLM decides what to say and whether to end based on goal / context / finish_condition and conversation history.
 """
 
 import logging
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 def _truncate(text: str | None, max_len: int = 80) -> str:
-    """截断文本用于日志输出"""
+    """Truncate text for log output"""
     if text is None:
         return "(None)"
     if len(text) <= max_len:
@@ -36,21 +36,21 @@ def _truncate(text: str | None, max_len: int = 80) -> str:
     return text[:max_len] + "..."
 
 
-# LLM 结构化输出格式
+# LLM structured output format
 class _LLMReaction(BaseModel):
-    content: str = Field(description="用户要说的话")
-    reason: str = Field(description="用户这样说的原因（简短）")
-    is_finished: bool = Field(description="用户目标是否已达成，达成则为 true")
+    content: str = Field(description="What the user wants to say")
+    reason: str = Field(description="Why the user says this (brief)")
+    is_finished: bool = Field(description="Whether the user's goal has been achieved; true if so")
     next_fuzzy_action: Optional[str] = Field(
         None,
-        description="预测用户下一步可能的模糊行为，例如：'继续追问细节'、'表达疑虑'、'准备结束对话'、'切换话题'等",
+        description="Predicted next fuzzy action the user might take, e.g.: 'ask for more details', 'express concerns', 'prepare to end conversation', 'switch topic', etc.",
     )
 
 
 class AutoTestAgent(AbstractTestAgent, name="auto"):
-    """自动模式虚拟用户 — 基于 LLM 驱动的对话模拟"""
+    """Auto-mode virtual user — LLM-driven conversation simulation"""
 
-    _config_model = "AutoUserInfo"  # evaluator.core.schema 中的展示用配置模型名
+    _config_model = "AutoUserInfo"  # Display config model name in evaluator.core.schema
 
     _display_meta = {
         "icon": (
@@ -61,107 +61,107 @@ class AutoTestAgent(AbstractTestAgent, name="auto"):
             " 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"
         ),
         "color": "#a855f7",
-        "features": ["LLM 驱动", "自主对话", "智能收敛"],
+        "features": ["LLM-driven", "Autonomous", "Smart Convergence"],
     }
 
     def __init__(self, user_info: AutoUserInfo, model: str = "gpt-4.1", **kwargs):
         super().__init__(user_info, **kwargs)
         self.model = model
         self.system_prompt = self._build_system_prompt()
-        # 成本统计（使用 langchain UsageMetadata）
+        # Cost tracking (using langchain UsageMetadata)
         self._cost = UsageMetadata(input_tokens=0, output_tokens=0, total_tokens=0)
 
     @property
     def cost(self) -> UsageMetadata:
-        """获取累计成本统计"""
+        """Get cumulative cost statistics"""
         return self._cost
 
     def _accumulate_cost(self, usage: dict[str, UsageMetadata] | None) -> None:
-        """累加 LLM 调用成本"""
+        """Accumulate LLM call cost"""
         from evaluator.utils.llm import accumulate_usage
 
         self._cost = accumulate_usage(self._cost, usage)
 
     def _build_system_prompt(self) -> str:
-        """拼 system prompt，告诉 LLM 它是谁、要干嘛、什么时候停"""
+        """Build system prompt telling the LLM who it is, what to do, and when to stop"""
         lines = [
-            "# 角色设定",
-            "你正在扮演一个真实用户，与一个 AI 助手进行对话。",
-            "你是用户，AI 助手是你的对话对象。你要像普通用户一样提问、回答问题、表达需求。",
+            "# Role",
+            "You are role-playing as a real user having a conversation with an AI assistant.",
+            "You are the user, and the AI assistant is your conversation partner. Ask questions, answer questions, and express needs like a regular user would.",
             "",
-            "# 重要提醒",
-            "- 你是用户，不是 AI 助手！",
-            "- 不要像 AI 助手那样提问或引导对话",
-            "- 不要使用「你就回答...」「你先告诉我...」这类指令性语言",
-            "- 当 AI 助手问你问题时，你应该回答，而不是反问",
+            "# Important Reminders",
+            "- You are the USER, not the AI assistant!",
+            "- Do not ask questions or steer the conversation like an AI assistant would",
+            "- Do not use commanding language like 'just answer...' or 'first tell me...'",
+            "- When the AI assistant asks you a question, you should answer it, not ask a counter-question",
             "",
-            f"# 你的目标\n{self.user_info.goal}",
+            f"# Your Goal\n{self.user_info.goal}",
         ]
         if self.user_info.context:
-            lines.append(f"\n# 你的背景信息\n{self.user_info.context}")
+            lines.append(f"\n# Your Background\n{self.user_info.context}")
         if self.user_info.finish_condition:
-            lines.append(f"\n# 结束条件\n{self.user_info.finish_condition}")
+            lines.append(f"\n# Finish Condition\n{self.user_info.finish_condition}")
         else:
-            lines.append("\n# 结束条件\n当你认为目标已经达成时，将 is_finished 设为 true。")
-        lines.append("\n# 行为要求")
-        lines.append("- 像真实用户一样说话，简洁自然")
-        lines.append("- 回答 AI 助手的问题，而不是反问")
-        lines.append("- 不要暴露你是 AI")
+            lines.append("\n# Finish Condition\nWhen you believe the goal has been achieved, set is_finished to true.")
+        lines.append("\n# Behavior Requirements")
+        lines.append("- Speak like a real user — concise and natural")
+        lines.append("- Answer the AI assistant's questions instead of asking counter-questions")
+        lines.append("- Do not reveal that you are an AI")
         lines.append(
-            "\n同时，请预测你下一步可能的模糊行为（next_fuzzy_action），"
-            "例如：'继续追问细节'、'表达疑虑'、'准备结束对话'、'切换话题'、'寻求确认'等。"
+            "\nAlso, predict your next possible fuzzy action (next_fuzzy_action), "
+            "e.g.: 'ask for more details', 'express concerns', 'prepare to end conversation', 'switch topic', 'seek confirmation', etc."
         )
         return "\n".join(lines)
 
     async def _generate_next_reaction(
         self, target_reaction: Optional[TargetAgentReaction]
     ) -> TestAgentReaction:
-        """生成下一步用户反应"""
+        """Generate next user reaction"""
 
-        # ---- 1. 如果有 strict_inputs 还没用完，直接发 ----
-        strict_index = self.current_turn - 1  # current_turn 已在 do_generate 中 +1
+        # ---- 1. If there are remaining strict_inputs, send directly ----
+        strict_index = self.current_turn - 1  # current_turn already incremented in do_generate
         if strict_index < len(self.user_info.strict_inputs):
             forced_text = self.user_info.strict_inputs[strict_index]
             logger.info(
-                "[TestAgent] Turn %d — 使用 strict_input[%d]: %s",
+                "[TestAgent] Turn %d — using strict_input[%d]: %s",
                 self.current_turn, strict_index, _truncate(forced_text, 100),
             )
             return TestAgentReaction(
                 action=TestAgentAction(type="semantic", semantic_content=forced_text),
-                reason="强制输入",
+                reason="forced input",
                 is_finished=False,
             )
 
-        # ---- 2. 拼对话历史 ----
-        # 注意 role 映射：LLM 扮演虚拟用户，所以虚拟用户说的是 assistant（LLM 自己），
-        # AI 助手说的是 user（对方）。这样 LLM 才能正确认同虚拟用户角色。
+        # ---- 2. Build conversation history ----
+        # Note role mapping: LLM plays the virtual user, so virtual user's words are assistant (LLM itself),
+        # and the AI assistant's words are user (the other party). This lets the LLM correctly identify with the virtual user role.
         llm_history: list[BasicMessage] = []
 
-        # 2a. 评测前的历史对话（role 翻转：原始 HumanMessage→assistant, AIMessage→user）
+        # 2a. Pre-evaluation history (role flipped: original HumanMessage->assistant, AIMessage->user)
         for msg in self.history:
             flipped_role: str = "assistant" if isinstance(msg, HumanMessage) else "user"
             llm_history.append(BasicMessage(role=flipped_role, content=msg.content))
 
-        # 2b. 本次评测的对话记忆（完整包含所有轮次）
+        # 2b. Current evaluation conversation memory (all turns)
         for mem in self.memory_list:
-            # 虚拟用户（LLM 自己）说了什么 → assistant
+            # What the virtual user (LLM itself) said -> assistant
             my_text = mem.test_reaction.action.semantic_content
             if my_text:
                 llm_history.append(BasicMessage(role="assistant", content=my_text))
 
-            # 被测系统（对方）回了什么 → user
+            # What the system under test (other party) replied -> user
             target_text = mem.target_response.extract_text() if mem.target_response else ""
             if target_text:
                 llm_history.append(BasicMessage(role="user", content=target_text))
 
-        # ---- 3. 确定 input ----
+        # ---- 3. Determine input ----
         if not llm_history:
-            input_text = "请开始对话，说出你的第一句话。"
+            input_text = "Please start the conversation with your first message."
         else:
-            input_text = "请继续对话。"
+            input_text = "Please continue the conversation."
 
         logger.debug(
-            "[TestAgent] Turn %d — 调用 LLM (model=%s), history=%d 条消息",
+            "[TestAgent] Turn %d — calling LLM (model=%s), history=%d messages",
             self.current_turn, self.model, len(llm_history),
         )
 
@@ -173,13 +173,13 @@ class AutoTestAgent(AbstractTestAgent, name="auto"):
             response_format=_LLMReaction,
         )
 
-        # 累加成本
+        # Accumulate cost
         self._accumulate_cost(result.usage)
 
-        # ---- 4. 拼结果 ----
+        # ---- 4. Build result ----
         if result.data:
             logger.info(
-                "[TestAgent] Turn %d — LLM 生成: %s (reason: %s, is_finished=%s, next_fuzzy=%s)",
+                "[TestAgent] Turn %d — LLM generated: %s (reason: %s, is_finished=%s, next_fuzzy=%s)",
                 self.current_turn,
                 _truncate(result.data.content, 100),
                 result.data.reason,
@@ -194,14 +194,14 @@ class AutoTestAgent(AbstractTestAgent, name="auto"):
                 usage=result.usage,
             )
 
-        # fallback：结构化解析失败，用原始文本
+        # fallback: structured parsing failed, use raw text
         logger.warning(
-            "[TestAgent] Turn %d — 结构化解析失败，使用原始文本: %s",
+            "[TestAgent] Turn %d — structured parsing failed, using raw text: %s",
             self.current_turn, _truncate(result.content, 100),
         )
         return TestAgentReaction(
             action=TestAgentAction(type="semantic", semantic_content=result.content),
-            reason="LLM 原始输出（结构化解析失败）",
+            reason="LLM raw output (structured parsing failed)",
             is_finished=False,
             usage=result.usage,
         )

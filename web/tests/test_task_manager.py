@@ -1,4 +1,4 @@
-"""TaskManager 单元测试"""
+"""TaskManager unit tests"""
 
 from unittest.mock import MagicMock
 
@@ -35,7 +35,7 @@ def _make_entry(task_id: str, checkpoint_session_id: str, status: str = "running
 
 
 def test_list_checkpoints_excludes_running_task_checkpoint(monkeypatch):
-    """运行中的新任务应从检查点列表中过滤"""
+    """Running new task should be filtered from checkpoint list"""
     mgr = TaskManager()
     mgr._tasks["task_1"] = _make_entry(task_id="task_1", checkpoint_session_id="task_1")
 
@@ -49,9 +49,9 @@ def test_list_checkpoints_excludes_running_task_checkpoint(monkeypatch):
 
 
 def test_list_checkpoints_excludes_running_resumed_checkpoint(monkeypatch):
-    """运行中的恢复任务应按 checkpoint_session_id 过滤，而非 task_id"""
+    """Running resumed task should be filtered by checkpoint_session_id, not task_id"""
     mgr = TaskManager()
-    # 恢复任务: task_id(新) != checkpoint_session_id(旧)
+    # Resumed task: task_id (new) != checkpoint_session_id (old)
     mgr._tasks["task_new"] = _make_entry(task_id="task_new", checkpoint_session_id="cp_old")
 
     monkeypatch.setattr(

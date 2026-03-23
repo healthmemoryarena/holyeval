@@ -1,14 +1,14 @@
-"""target_agent — 被测目标代理插件，实现 AbstractTargetAgent
+"""target_agent — Target agent plugins implementing AbstractTargetAgent
 
-导入本模块会触发子类注册（__init_subclass__），使目标代理可通过名称查找。
-内部插件（theta_api 等）按需加载，缺失时静默跳过。
+Importing this module triggers subclass registration (__init_subclass__), enabling target agents to be looked up by name.
+Internal plugins (theta_api, etc.) are loaded on demand; missing ones are silently skipped.
 """
 
 from evaluator.plugin.target_agent.llm_api_target_agent import LlmApiTargetAgent
 
 __all__ = ["LlmApiTargetAgent"]
 
-# —— 内部插件（发布时排除，import 失败不影响框架运行）——
+# -- Internal plugins (excluded in open-source release, import failures do not affect framework) --
 
 try:
     from evaluator.plugin.target_agent.theta_api_target_agent import ThetaApiTargetAgent  # noqa: F401

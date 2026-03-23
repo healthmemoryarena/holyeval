@@ -1,4 +1,4 @@
-"""Benchmark API 测试"""
+"""Benchmark API tests"""
 
 import pytest
 
@@ -7,11 +7,11 @@ from evaluator.core.schema import BenchmarkSummary, CaseSummary, DatasetDetail, 
 
 @pytest.mark.asyncio
 async def test_list_benchmarks(client, monkeypatch):
-    """GET /api/benchmarks 返回 benchmark 列表"""
+    """GET /api/benchmarks returns benchmark list"""
     mock_data = [
         BenchmarkSummary(
             name="healthbench",
-            description="医疗 AI 评测",
+            description="Medical AI evaluation",
             datasets=[DatasetInfo(name="sample", case_count=100, file_size_kb=512.0)],
         )
     ]
@@ -26,7 +26,7 @@ async def test_list_benchmarks(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_dataset_detail(client, monkeypatch):
-    """GET /api/benchmarks/{bm}/{ds} 返回 dataset 详情"""
+    """GET /api/benchmarks/{bm}/{ds} returns dataset detail"""
     mock_detail = DatasetDetail(
         benchmark="healthbench",
         dataset="sample",
@@ -47,10 +47,10 @@ async def test_get_dataset_detail(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_dataset_detail_not_found(client, monkeypatch):
-    """GET /api/benchmarks/{bm}/{ds} — 不存在时返回 404"""
+    """GET /api/benchmarks/{bm}/{ds} returns 404 when not found"""
 
     def _raise(bm, ds, preview_limit=10):
-        raise FileNotFoundError("数据集不存在")
+        raise FileNotFoundError("Dataset not found")
 
     monkeypatch.setattr("web.app.api.benchmarks.get_dataset_detail", _raise)
     resp = await client.get("/api/benchmarks/nonexistent/nope")
@@ -59,8 +59,8 @@ async def test_get_dataset_detail_not_found(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_case_by_id(client, monkeypatch):
-    """GET /api/benchmarks/{bm}/{ds}/cases/{id} 返回单条 case"""
-    mock_case = {"id": "hb_001", "title": "头痛咨询", "user": {"type": "manual"}}
+    """GET /api/benchmarks/{bm}/{ds}/cases/{id} returns a single case"""
+    mock_case = {"id": "hb_001", "title": "Headache consultation", "user": {"type": "manual"}}
     monkeypatch.setattr("web.app.api.benchmarks.get_case_by_id", lambda bm, ds, cid: mock_case)
     resp = await client.get("/api/benchmarks/healthbench/sample/cases/hb_001")
     assert resp.status_code == 200
@@ -69,10 +69,10 @@ async def test_get_case_by_id(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_case_by_id_not_found(client, monkeypatch):
-    """GET /api/benchmarks/{bm}/{ds}/cases/{id} — 不存在时返回 404"""
+    """GET /api/benchmarks/{bm}/{ds}/cases/{id} returns 404 when not found"""
 
     def _raise(bm, ds, cid):
-        raise KeyError("用例不存在")
+        raise KeyError("Case not found")
 
     monkeypatch.setattr("web.app.api.benchmarks.get_case_by_id", _raise)
     resp = await client.get("/api/benchmarks/healthbench/sample/cases/nonexistent")

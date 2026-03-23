@@ -1,4 +1,4 @@
-"""Tasks API 测试"""
+"""Tasks API tests"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from evaluator.plugin.target_agent.llm_api_target_agent import LlmApiTargetInfo
 
 @dataclass
 class _MockSession:
-    """轻量 BatchSession mock"""
+    """Lightweight BatchSession mock"""
 
     id: str = "test-session-001"
     total: int = 10
@@ -56,7 +56,7 @@ class _MockEntry:
 
 
 def _make_mock_manager(entries: list[_MockEntry] | None = None):
-    """构造 TaskManager mock"""
+    """Build a TaskManager mock"""
     entries = entries or []
     mgr = MagicMock()
     mgr.list_tasks.return_value = entries
@@ -65,7 +65,7 @@ def _make_mock_manager(entries: list[_MockEntry] | None = None):
     def _snapshot(tid):
         entry = next((e for e in entries if e.task_id == tid), None)
         if not entry:
-            raise KeyError(f"任务不存在: {tid}")
+            raise KeyError(f"Task not found: {tid}")
         snap = entry.session.snapshot()
         snap["status"] = entry.status
         snap["benchmark"] = entry.benchmark
@@ -78,7 +78,7 @@ def _make_mock_manager(entries: list[_MockEntry] | None = None):
         return snap
 
     mgr.get_snapshot.side_effect = _snapshot
-    mgr.cancel_task.side_effect = lambda tid: (_ for _ in ()).throw(KeyError(f"任务不存在: {tid}")) if not any(
+    mgr.cancel_task.side_effect = lambda tid: (_ for _ in ()).throw(KeyError(f"Task not found: {tid}")) if not any(
         e.task_id == tid for e in entries
     ) else None
     return mgr
@@ -86,7 +86,7 @@ def _make_mock_manager(entries: list[_MockEntry] | None = None):
 
 @pytest.mark.asyncio
 async def test_list_tasks_empty(client, monkeypatch):
-    """GET /api/tasks — 无任务时返回空列表"""
+    """GET /api/tasks returns empty list when no tasks exist"""
     monkeypatch.setattr("web.app.api.tasks.task_manager", _make_mock_manager())
     resp = await client.get("/api/tasks")
     assert resp.status_code == 200
@@ -95,7 +95,7 @@ async def test_list_tasks_empty(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_list_tasks_with_entries(client, monkeypatch):
-    """GET /api/tasks — 有任务时返回列表"""
+    """GET /api/tasks returns list when tasks exist"""
     entry = _MockEntry()
     monkeypatch.setattr("web.app.api.tasks.task_manager", _make_mock_manager([entry]))
     resp = await client.get("/api/tasks")
@@ -109,7 +109,7 @@ async def test_list_tasks_with_entries(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_task_detail(client, monkeypatch):
-    """GET /api/tasks/{id} 返回任务详情"""
+    """GET /api/tasks/{id} returns task detail"""
     entry = _MockEntry()
     monkeypatch.setattr("web.app.api.tasks.task_manager", _make_mock_manager([entry]))
     resp = await client.get(f"/api/tasks/{entry.task_id}")
@@ -124,7 +124,7 @@ async def test_get_task_detail(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_task_not_found(client, monkeypatch):
-    """GET /api/tasks/{id} — 不存在时返回 404"""
+    """GET /api/tasks/{id} returns 404 when not found"""
     monkeypatch.setattr("web.app.api.tasks.task_manager", _make_mock_manager())
     resp = await client.get("/api/tasks/nonexistent")
     assert resp.status_code == 404
@@ -132,7 +132,7 @@ async def test_get_task_not_found(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cancel_task(client, monkeypatch):
-    """POST /api/tasks/{id}/cancel 取消任务"""
+    """POST /api/tasks/{id}/cancel cancels a task"""
     entry = _MockEntry()
     monkeypatch.setattr("web.app.api.tasks.task_manager", _make_mock_manager([entry]))
     resp = await client.post(f"/api/tasks/{entry.task_id}/cancel")
@@ -142,19 +142,19 @@ async def test_cancel_task(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cancel_task_not_found(client, monkeypatch):
-    """POST /api/tasks/{id}/cancel — 不存在时返回 404"""
+    """POST /api/tasks/{id}/cancel returns 404 when not found"""
     monkeypatch.setattr("web.app.api.tasks.task_manager", _make_mock_manager())
     resp = await client.post("/api/tasks/nonexistent/cancel")
     assert resp.status_code == 404
 
 
 # ============================================================
-# POST /api/tasks — 创建任务
+# POST /api/tasks — Create task
 # ============================================================
 
 
 def _mock_benchmarks():
-    """返回 mock 的 benchmark 列表"""
+    """Return a mock benchmark list"""
     return [
         BenchmarkSummary(
             name="healthbench",
@@ -175,7 +175,7 @@ def _mock_benchmarks():
 
 @pytest.mark.asyncio
 async def test_create_task_success(client, monkeypatch):
-    """POST /api/tasks 创建任务成功"""
+    """POST /api/tasks creates task successfully"""
     entry = _MockEntry(status="running")
 
     async def _mock_create(**kwargs):
@@ -202,10 +202,10 @@ async def test_create_task_success(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_task_invalid_benchmark(client, monkeypatch):
-    """POST /api/tasks — benchmark 不存在返回 400"""
+    """POST /api/tasks returns 400 when benchmark not found"""
 
     async def _mock_create(**kwargs):
-        raise FileNotFoundError("评测类型不存在: bad")
+        raise FileNotFoundError("Benchmark type not found: bad")
 
     mgr = _make_mock_manager()
     mgr.create_task = _mock_create
@@ -222,8 +222,8 @@ async def test_create_task_invalid_benchmark(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_task_required_field_missing(client, monkeypatch):
-    """POST /api/tasks — required 字段无默认值时返回 400"""
-    # 构造一个 model 无默认值且 required 的 spec
+    """POST /api/tasks returns 400 when required field has no default"""
+    # Build a spec where model has no default and is required
     no_default_benchmarks = lambda: [
         BenchmarkSummary(
             name="healthbench",
@@ -246,24 +246,26 @@ async def test_create_task_required_field_missing(client, monkeypatch):
         "dataset": "sample",
     })
     assert resp.status_code == 400
-    assert "必填字段" in resp.json()["detail"]
+    # Server may return Chinese or English error; check for either
+    detail = resp.json()["detail"]
+    assert "required" in detail.lower() or "必填" in detail
 
 
 # ============================================================
-# GET /api/tasks/{task_id}/cases/{case_id} — 查看用例结果
+# GET /api/tasks/{task_id}/cases/{case_id} — View case result
 # ============================================================
 
 
 @dataclass
 class _MockCaseContext:
-    """轻量 CaseContext mock"""
+    """Lightweight CaseContext mock"""
     status: MagicMock = field(default_factory=lambda: MagicMock(value="completed"))
     result: Any = None
 
 
 @pytest.mark.asyncio
 async def test_get_case_result_no_result(client, monkeypatch):
-    """GET /api/tasks/{id}/cases/{id} — 运行中，无结果"""
+    """GET /api/tasks/{id}/cases/{id} returns no result when in progress"""
     ctx = _MockCaseContext(status=MagicMock(value="dialogue"), result=None)
     session = _MockSession(contexts={"case_001": ctx})
     entry = _MockEntry(session=session)
@@ -278,7 +280,7 @@ async def test_get_case_result_no_result(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_case_result_with_result(client, monkeypatch):
-    """GET /api/tasks/{id}/cases/{id} — 已完成，有结果"""
+    """GET /api/tasks/{id}/cases/{id} returns result when completed"""
     mock_result = MagicMock()
     mock_result.model_dump.return_value = {"id": "case_001", "eval": {"result": "pass", "score": 0.9}}
     ctx = _MockCaseContext(status=MagicMock(value="completed"), result=mock_result)
@@ -295,7 +297,7 @@ async def test_get_case_result_with_result(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_case_result_task_not_found(client, monkeypatch):
-    """GET /api/tasks/{id}/cases/{id} — 任务不存在返回 404"""
+    """GET /api/tasks/{id}/cases/{id} returns 404 when task not found"""
     monkeypatch.setattr("web.app.api.tasks.task_manager", _make_mock_manager())
     resp = await client.get("/api/tasks/nonexistent/cases/case_001")
     assert resp.status_code == 404
@@ -303,7 +305,7 @@ async def test_get_case_result_task_not_found(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_case_result_case_not_found(client, monkeypatch):
-    """GET /api/tasks/{id}/cases/{id} — 用例不存在返回 404"""
+    """GET /api/tasks/{id}/cases/{id} returns 404 when case not found"""
     entry = _MockEntry()
     monkeypatch.setattr("web.app.api.tasks.task_manager", _make_mock_manager([entry]))
     resp = await client.get(f"/api/tasks/{entry.task_id}/cases/nonexistent")

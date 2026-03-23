@@ -1,16 +1,16 @@
 """
-HealthBenchEvalAgent — 基于 HealthBench 原版 GRADER_TEMPLATE 的 rubric 评估器
+HealthBenchEvalAgent — Rubric evaluator based on the original HealthBench GRADER_TEMPLATE
 
-注册名称: "healthbench"
+Registered name: "healthbench"
 
-工作原理:
-1. 从 TestAgent / TargetAgent 的 memory_list + history 中提取完整对话
-2. 对每条 rubric criterion，调用 grader LLM 判定是否满足（criteria_met: bool）
-3. 计算得分：achieved_points / total_positive_points（与原版 calculate_score 一致）
-4. clip 到 [0, 1]，结果为 scored（仅评分，不做 pass/fail 判定）
+How it works:
+1. Extract the full conversation from TestAgent / TargetAgent memory_list + history
+2. For each rubric criterion, call the grader LLM to determine if met (criteria_met: bool)
+3. Calculate score: achieved_points / total_positive_points (consistent with original calculate_score)
+4. Clip to [0, 1], result is scored (scoring only, no pass/fail judgment)
 
-Grader Prompt 完全复用 HealthBench 原版（英文），保证评测结果可比。
-参考: https://github.com/openai/simple-evals/blob/main/healthbench_eval.py
+Grader prompt fully reuses the original HealthBench version (English) to ensure comparable results.
+Reference: https://github.com/openai/simple-evals/blob/main/healthbench_eval.py
 """
 
 import asyncio
@@ -38,32 +38,32 @@ DEFAULT_MODEL = "gpt-4.1"
 
 
 # ============================================================
-# 评估配置模型
+# Evaluation config model
 # ============================================================
 
 
 class HealthBenchRubric(BaseModel):
-    """HealthBench rubric 单条评分标准
+    """HealthBench rubric — a single scoring criterion
 
-    对应 HealthBench 数据集中每条 rubric criterion。
-    points 可为负值（表示不希望出现的行为），范围 -10 ~ +10。
+    Corresponds to each rubric criterion in the HealthBench dataset.
+    Points can be negative (indicating undesirable behavior), range -10 to +10.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    criterion: str = Field(description="评分标准文本")
-    points: float = Field(description="分值（可负，-10 ~ +10）")
-    tags: List[str] = Field(default_factory=list, description="标签（如 axis:accuracy, level:example）")
+    criterion: str = Field(description="Criterion text")
+    points: float = Field(description="Point value (can be negative, -10 to +10)")
+    tags: List[str] = Field(default_factory=list, description="Tags (e.g. axis:accuracy, level:example)")
 
 
 class HealthBenchEvalInfo(BaseModel):
-    """HealthBench rubric 评估 — 逐条 criterion 判定，LLM-as-Judge
+    """HealthBench rubric evaluation — per-criterion judgment, LLM-as-Judge
 
-    复用 HealthBench 原版 GRADER_TEMPLATE，由 grader 模型逐条判断 criterion 是否满足。
-    分数计算：achieved_points / total_positive_points，与原版 calculate_score 完全一致。
-    仅评分（result="scored"），不做 pass/fail 判定。
+    Reuses the original HealthBench GRADER_TEMPLATE; grader model judges each criterion.
+    Score calculation: achieved_points / total_positive_points, fully consistent with original calculate_score.
+    Scoring only (result="scored"), no pass/fail judgment.
 
-    适用于将 HealthBench 数据集转换后在 HolyEval 框架中运行评测。
+    Designed for running HealthBench datasets converted to HolyEval format.
     """
 
     model_config = ConfigDict(
@@ -81,14 +81,14 @@ class HealthBenchEvalInfo(BaseModel):
         },
     )
 
-    evaluator: Literal["healthbench"] = Field(description="评估器类型")
-    model: Optional[str] = Field("gpt-4.1", description="grader 模型（默认 gpt-4.1，与 HealthBench 原版一致）")
-    rubrics: List[HealthBenchRubric] = Field(description="评分标准列表")
+    evaluator: Literal["healthbench"] = Field(description="Evaluator type")
+    model: Optional[str] = Field("gpt-4.1", description="Grader model (default gpt-4.1, consistent with original HealthBench)")
+    rubrics: List[HealthBenchRubric] = Field(description="List of scoring rubrics")
 
 
 # ============================================================
-# HealthBench 原版 GRADER_TEMPLATE
-# 来源: https://github.com/openai/simple-evals/blob/main/healthbench_eval.py
+# Original HealthBench GRADER_TEMPLATE
+# Source: https://github.com/openai/simple-evals/blob/main/healthbench_eval.py
 # ============================================================
 
 GRADER_TEMPLATE = """Your job is to look at a conversation and a rubric item, and score the last turn (i.e., the last assistant response, or the completion) in the conversation on how well it follows the rubric item.
@@ -147,7 +147,7 @@ Return just the json object in markdown format. Do not include any other text in
 
 
 class HealthBenchEvalAgent(AbstractEvalAgent, name="healthbench", params_model=HealthBenchEvalInfo):
-    """基于 HealthBench 原版 rubric 的评估器"""
+    """HealthBench rubric-based evaluator"""
 
     _display_meta = {
         "icon": (
@@ -155,7 +155,7 @@ class HealthBenchEvalAgent(AbstractEvalAgent, name="healthbench", params_model=H
             "-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
         ),
         "color": "#ef4444",
-        "features": ["HealthBench", "Rubric 评分", "并发评估"],
+        "features": ["HealthBench", "Rubric Scoring", "Concurrent Evaluation"],
     }
     _cost_meta = {
         "est_cost_per_case": 0.035,  # ~11 rubrics × gpt-4.1 grading, USD/case
@@ -177,7 +177,7 @@ class HealthBenchEvalAgent(AbstractEvalAgent, name="healthbench", params_model=H
         self._cost = accumulate_usage(self._cost, usage)
 
     # ----------------------------------------------------------
-    # 框架接口
+    # Framework interface
     # ----------------------------------------------------------
 
     async def run(
@@ -186,35 +186,35 @@ class HealthBenchEvalAgent(AbstractEvalAgent, name="healthbench", params_model=H
         session_info: SessionInfo | None = None,
     ) -> EvalResult:
         try:
-            # 提取完整对话（含 history）
+            # Extract full conversation (including history)
             conversation = self._build_conversation(memory_list, self.history)
             if not conversation:
-                return EvalResult(result="fail", score=0.0, feedback="无对话记录，无法评估")
+                return EvalResult(result="fail", score=0.0, feedback="No conversation records, cannot evaluate")
 
             rubrics = self.eval_config.rubrics
             if not rubrics:
-                return EvalResult(result="fail", score=0.0, feedback="未配置 rubrics，无法评估")
+                return EvalResult(result="fail", score=0.0, feedback="No rubrics configured, cannot evaluate")
 
             logger.info(
-                "[HealthBenchEval] 开始评估 — %d 条 rubric, model=%s",
+                "[HealthBenchEval] Starting evaluation — %d rubrics, model=%s",
                 len(rubrics),
                 self.model,
             )
 
-            # 并发评估所有 rubric
+            # Concurrently evaluate all rubrics
             conversation_str = "\n\n".join(f"{m['role']}: {m['content']}" for m in conversation)
             grading_results = await asyncio.gather(*[
                 self._grade_rubric_item(conversation_str, rubric) for rubric in rubrics
             ])
 
-            # 计算分数（与原版 calculate_score 一致）
+            # Calculate score (consistent with original calculate_score)
             score = self._calculate_score(rubrics, grading_results)
             if score is None:
-                return EvalResult(result="fail", score=0.0, feedback="无正分 rubric 项，无法计算分数")
+                return EvalResult(result="fail", score=0.0, feedback="No positive-point rubric items, cannot calculate score")
 
             clipped_score = max(0.0, min(1.0, score))
 
-            # 构建详情
+            # Build details
             rubric_details = []
             for rubric, result in zip(rubrics, grading_results):
                 rubric_details.append({
@@ -226,10 +226,10 @@ class HealthBenchEvalAgent(AbstractEvalAgent, name="healthbench", params_model=H
                 })
 
             met_count = sum(1 for r in grading_results if r.get("criteria_met"))
-            feedback = f"HealthBench rubric 评估: {met_count}/{len(rubrics)} 条标准满足, 得分={clipped_score:.3f}"
+            feedback = f"HealthBench rubric evaluation: {met_count}/{len(rubrics)} criteria met, score={clipped_score:.3f}"
 
             logger.info(
-                "[HealthBenchEval] 评估完成 — score=%.3f, scored (%d/%d met)",
+                "[HealthBenchEval] Evaluation complete — score=%.3f, scored (%d/%d met)",
                 clipped_score,
                 met_count,
                 len(rubrics),
@@ -243,15 +243,15 @@ class HealthBenchEvalAgent(AbstractEvalAgent, name="healthbench", params_model=H
             )
 
         except Exception as e:
-            logger.error("[HealthBenchEval] 评估过程出错: %s", e, exc_info=True)
-            return EvalResult(result="fail", score=0.0, feedback=f"评估过程出错: {e}")
+            logger.error("[HealthBenchEval] Evaluation error: %s", e, exc_info=True)
+            return EvalResult(result="fail", score=0.0, feedback=f"Evaluation error: {e}")
 
     # ----------------------------------------------------------
-    # 核心方法
+    # Core methods
     # ----------------------------------------------------------
 
     async def _grade_rubric_item(self, conversation_str: str, rubric: HealthBenchRubric) -> dict:
-        """调用 grader LLM 评估单条 rubric criterion"""
+        """Call grader LLM to evaluate a single rubric criterion"""
         rubric_str = f"[{rubric.points}] {rubric.criterion}"
         grader_prompt = GRADER_TEMPLATE.replace("<<conversation>>", conversation_str).replace(
             "<<rubric_item>>", rubric_str
@@ -274,26 +274,26 @@ class HealthBenchEvalAgent(AbstractEvalAgent, name="healthbench", params_model=H
                         return parsed
 
                 logger.warning(
-                    "[HealthBenchEval] grader 输出格式异常 (attempt %d/%d): %s",
+                    "[HealthBenchEval] Grader output format error (attempt %d/%d): %s",
                     attempt + 1,
                     max_retries,
                     result.content[:200],
                 )
             except Exception as e:
                 logger.warning(
-                    "[HealthBenchEval] grader 调用失败 (attempt %d/%d): %s",
+                    "[HealthBenchEval] Grader call failed (attempt %d/%d): %s",
                     attempt + 1,
                     max_retries,
                     e,
                 )
 
-        # 重试耗尽，默认 criteria_met=False
-        logger.error("[HealthBenchEval] grader 重试耗尽，默认 criteria_met=False: %s", rubric.criterion[:100])
+        # Retries exhausted, default to criteria_met=False
+        logger.error("[HealthBenchEval] Grader retries exhausted, defaulting to criteria_met=False: %s", rubric.criterion[:100])
         return {"explanation": "Grading failed after retries", "criteria_met": False}
 
     @staticmethod
     def _calculate_score(rubrics: List[HealthBenchRubric], grading_results: List[dict]) -> Optional[float]:
-        """计算分数 — 与 HealthBench 原版 calculate_score 一致"""
+        """Calculate score — consistent with original HealthBench calculate_score"""
         total_possible = sum(r.points for r in rubrics if r.points > 0)
         if total_possible == 0:
             return None
@@ -302,7 +302,7 @@ class HealthBenchEvalAgent(AbstractEvalAgent, name="healthbench", params_model=H
 
     @staticmethod
     def _parse_json_response(text: str) -> Optional[dict]:
-        """从 grader 响应中提取 JSON（兼容 markdown 包裹）"""
+        """Extract JSON from grader response (compatible with markdown wrapping)"""
         cleaned = re.sub(r"^```json\s*|\s*```$", "", text.strip())
         try:
             return json.loads(cleaned)
@@ -310,7 +310,7 @@ class HealthBenchEvalAgent(AbstractEvalAgent, name="healthbench", params_model=H
             return None
 
     # ----------------------------------------------------------
-    # 对话提取
+    # Conversation extraction
     # ----------------------------------------------------------
 
     @staticmethod
@@ -318,16 +318,16 @@ class HealthBenchEvalAgent(AbstractEvalAgent, name="healthbench", params_model=H
         memory_list: List[TestAgentMemory],
         history: List[BaseMessage] | None = None,
     ) -> List[Dict[str, str]]:
-        """从 history + memory_list 提取完整对话"""
+        """Extract full conversation from history + memory_list"""
         conversation: List[Dict[str, str]] = []
 
-        # 1. 历史对话（TestCase.history）
+        # 1. Historical conversation (TestCase.history)
         if history:
             for msg in history:
                 role = "user" if msg.type == "human" else "assistant"
                 conversation.append({"role": role, "content": msg.content})
 
-        # 2. 本轮对话（memory_list）
+        # 2. Current conversation (memory_list)
         for mem in memory_list:
             if mem.test_reaction.is_finished and mem.target_response is None:
                 continue

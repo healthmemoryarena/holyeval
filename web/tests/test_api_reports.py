@@ -1,4 +1,4 @@
-"""Reports API 测试"""
+"""Reports API tests"""
 
 import pytest
 
@@ -7,7 +7,7 @@ from evaluator.core.schema import ReportEntry
 
 @pytest.mark.asyncio
 async def test_list_reports(client, monkeypatch):
-    """GET /api/reports 返回报告列表"""
+    """GET /api/reports returns report list"""
     mock_reports = [
         ReportEntry(benchmark="healthbench", dataset="sample", date="20260212_143012", filename="sample_20260212_143012.json"),
     ]
@@ -22,7 +22,7 @@ async def test_list_reports(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_list_reports_empty(client, monkeypatch):
-    """GET /api/reports — 无报告时返回空列表"""
+    """GET /api/reports returns empty list when no reports exist"""
     monkeypatch.setattr("web.app.api.reports.list_reports", lambda: [])
     resp = await client.get("/api/reports")
     assert resp.status_code == 200
@@ -31,7 +31,7 @@ async def test_list_reports_empty(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_report_content(client, monkeypatch):
-    """GET /api/reports/{bm}/{fn} 返回报告内容"""
+    """GET /api/reports/{bm}/{fn} returns report content"""
     mock_content = {
         "id": "session-001",
         "benchmark": "healthbench",
@@ -48,10 +48,10 @@ async def test_get_report_content(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_report_not_found(client, monkeypatch):
-    """GET /api/reports/{bm}/{fn} — 不存在时返回 404"""
+    """GET /api/reports/{bm}/{fn} returns 404 when not found"""
 
     def _raise(bm, fn):
-        raise FileNotFoundError("报告不存在")
+        raise FileNotFoundError("Report not found")
 
     monkeypatch.setattr("web.app.api.reports.get_report_content", _raise)
     resp = await client.get("/api/reports/healthbench/nonexistent.json")

@@ -1,19 +1,19 @@
 """
-MedCalcEvalAgent — 基于 MedCalc-Bench 的医疗计算评估器
+MedCalcEvalAgent — Medical calculation evaluator based on MedCalc-Bench
 
-注册名称: "medcalc"
+Registered name: "medcalc"
 
-工作原理:
-1. 从 TargetAgent 的 memory_list 中提取 AI 回复文本
-2. 调用 LLM 从自然语言回复中提取结构化答案
-3. 根据 output_type 进行类型化匹配：
-   - decimal: 答案落在 [lower_limit, upper_limit] 区间内
-   - integer: 四舍五入后精确匹配
-   - date: MM/DD/YYYY 格式精确匹配
-   - weeks_days: "X weeks, Y days" 标准化后精确匹配
-4. 二元评分: pass(1.0) / fail(0.0)
+How it works:
+1. Extract AI response text from TargetAgent's memory_list
+2. Call LLM to extract structured answer from natural language response
+3. Perform typed matching based on output_type:
+   - decimal: answer falls within [lower_limit, upper_limit] range
+   - integer: exact match after rounding
+   - date: exact match in MM/DD/YYYY format
+   - weeks_days: exact match after "X weeks, Y days" normalization
+4. Binary scoring: pass(1.0) / fail(0.0)
 
-参考: https://arxiv.org/abs/2406.12036
+Reference: https://arxiv.org/abs/2406.12036
 """
 
 import json
@@ -33,20 +33,20 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# 评估配置模型
+# Evaluation config model
 # ============================================================
 
 
 class MedCalcEvalInfo(BaseModel):
-    """MedCalc-Bench 医疗计算评估 — LLM 答案提取 + 类型化数值匹配
+    """MedCalc-Bench medical calculation evaluation — LLM answer extraction + typed numeric matching
 
-    基于 MedCalc-Bench 数据集（https://arxiv.org/abs/2406.12036），评估 LLM 的医疗计算能力。
-    评估流程：LLM 从目标回复中提取答案 → 根据 output_type 进行类型化匹配：
-      - decimal: 答案落在 [lower_limit, upper_limit] 区间内（±5% 容差）
-      - integer: 四舍五入后精确匹配
-      - date: MM/DD/YYYY 格式精确匹配
-      - weeks_days: "X weeks, Y days" 标准化后精确匹配
-    二元评分：pass(1.0) / fail(0.0)，与原版 MedCalc-Bench 准确率指标一致。
+    Based on MedCalc-Bench dataset (https://arxiv.org/abs/2406.12036), evaluates LLM medical calculation ability.
+    Flow: LLM extracts answer from target response -> typed matching based on output_type:
+      - decimal: answer falls within [lower_limit, upper_limit] range
+      - integer: exact match after rounding
+      - date: exact match in MM/DD/YYYY format
+      - weeks_days: exact match after "X weeks, Y days" normalization
+    Binary scoring: pass(1.0) / fail(0.0), consistent with original MedCalc-Bench accuracy metric.
     """
 
     model_config = ConfigDict(
@@ -69,18 +69,18 @@ class MedCalcEvalInfo(BaseModel):
         },
     )
 
-    evaluator: Literal["medcalc"] = Field(description="评估器类型")
-    ground_truth: str = Field(description="标准答案（字符串形式，保留精度）")
-    lower_limit: str = Field("", description="容差下限（仅 decimal 类型使用）")
-    upper_limit: str = Field("", description="容差上限（仅 decimal 类型使用）")
-    output_type: Literal["decimal", "integer", "date", "weeks_days"] = Field(description="输出类型")
-    explanation: str = Field("", description="标准答案解题步骤（调试用，不参与评分）")
-    extractor_model: Optional[str] = Field("gpt-4.1", description="答案提取模型")
+    evaluator: Literal["medcalc"] = Field(description="Evaluator type")
+    ground_truth: str = Field(description="Standard answer (string form, preserving precision)")
+    lower_limit: str = Field("", description="Tolerance lower limit (decimal type only)")
+    upper_limit: str = Field("", description="Tolerance upper limit (decimal type only)")
+    output_type: Literal["decimal", "integer", "date", "weeks_days"] = Field(description="Output type")
+    explanation: str = Field("", description="Standard answer solution steps (for debugging, not used in scoring)")
+    extractor_model: Optional[str] = Field("gpt-4.1", description="Answer extraction model")
 
 DEFAULT_MODEL = "gpt-4.1"
 
 # ============================================================
-# 答案提取 Prompt
+# Answer extraction prompt
 # ============================================================
 
 EXTRACTION_PROMPT = """You are a medical answer extractor. Given an AI assistant's response to a medical calculation question, extract ONLY the final numerical answer.
@@ -104,7 +104,7 @@ Return ONLY the JSON object, no other text."""
 
 
 class MedCalcEvalAgent(AbstractEvalAgent, name="medcalc", params_model=MedCalcEvalInfo):
-    """医疗计算评估器 — LLM 答案提取 + 类型化数值匹配"""
+    """Medical calculation evaluator — LLM answer extraction + typed numeric matching"""
 
     _display_meta = {
         "icon": (
@@ -117,10 +117,10 @@ class MedCalcEvalAgent(AbstractEvalAgent, name="medcalc", params_model=MedCalcEv
             ".757c0-1.108-.806-2.057-1.907-2.185A48.507 48.507 0 0012 2.25z"
         ),
         "color": "#8b5cf6",
-        "features": ["MedCalc-Bench", "LLM 答案提取", "类型化匹配"],
+        "features": ["MedCalc-Bench", "LLM Answer Extraction", "Typed Matching"],
     }
     _cost_meta = {
-        "est_cost_per_case": 0.003,  # 单次 gpt-4.1 答案提取调用
+        "est_cost_per_case": 0.003,  # Single gpt-4.1 answer extraction call
     }
 
     def __init__(self, eval_config: MedCalcEvalInfo, **kwargs):
@@ -139,7 +139,7 @@ class MedCalcEvalAgent(AbstractEvalAgent, name="medcalc", params_model=MedCalcEv
         self._cost = accumulate_usage(self._cost, usage)
 
     # ----------------------------------------------------------
-    # 框架接口
+    # Framework interface
     # ----------------------------------------------------------
 
     async def run(
@@ -148,37 +148,37 @@ class MedCalcEvalAgent(AbstractEvalAgent, name="medcalc", params_model=MedCalcEv
         session_info: SessionInfo | None = None,
     ) -> EvalResult:
         try:
-            # 1. 提取 AI 回复文本
+            # 1. Extract AI response text
             response_text = self._extract_response_text(memory_list)
             if not response_text:
-                return EvalResult(result="fail", score=0.0, feedback="目标 AI 无回复，无法评估")
+                return EvalResult(result="fail", score=0.0, feedback="Target AI has no response, cannot evaluate")
 
             logger.info(
-                "[MedCalcEval] 开始评估 — output_type=%s, ground_truth=%s, model=%s",
+                "[MedCalcEval] Starting evaluation — output_type=%s, ground_truth=%s, model=%s",
                 self.config.output_type,
                 self.config.ground_truth,
                 self.model,
             )
 
-            # 2. LLM 提取答案
+            # 2. LLM answer extraction
             extracted = await self._extract_answer(response_text)
             if extracted is None or extracted.upper() == "NONE":
                 return EvalResult(
                     result="fail",
                     score=0.0,
-                    feedback=f"无法从 AI 回复中提取答案（output_type={self.config.output_type}）",
+                    feedback=f"Cannot extract answer from AI response (output_type={self.config.output_type})",
                     trace=EvalTrace(eval_detail={"response_preview": response_text[:500], "extracted": None}),
                 )
 
-            # 3. 类型化匹配
+            # 3. Typed matching
             is_correct, detail = self._match_answer(extracted)
 
             score = 1.0 if is_correct else 0.0
             result = "pass" if is_correct else "fail"
 
             feedback = (
-                f"MedCalc 评估 ({self.config.output_type}): {result} — "
-                f"提取答案={extracted}, 标准答案={self.config.ground_truth}, {detail}"
+                f"MedCalc evaluation ({self.config.output_type}): {result} — "
+                f"extracted={extracted}, ground_truth={self.config.ground_truth}, {detail}"
             )
 
             logger.info("[MedCalcEval] %s — extracted=%s, ground_truth=%s", result, extracted, self.config.ground_truth)
@@ -199,16 +199,16 @@ class MedCalcEvalAgent(AbstractEvalAgent, name="medcalc", params_model=MedCalcEv
             )
 
         except Exception as e:
-            logger.error("[MedCalcEval] 评估过程出错: %s", e, exc_info=True)
-            return EvalResult(result="fail", score=0.0, feedback=f"评估过程出错: {e}")
+            logger.error("[MedCalcEval] Evaluation error: %s", e, exc_info=True)
+            return EvalResult(result="fail", score=0.0, feedback=f"Evaluation error: {e}")
 
     # ----------------------------------------------------------
-    # 回复提取
+    # Response extraction
     # ----------------------------------------------------------
 
     @staticmethod
     def _extract_response_text(memory_list: list[TestAgentMemory]) -> str:
-        """从 memory_list 中提取所有 AI 回复文本"""
+        """Extract all AI response text from memory_list"""
         parts: List[str] = []
         for mem in memory_list:
             if mem.target_response is not None:
@@ -218,13 +218,13 @@ class MedCalcEvalAgent(AbstractEvalAgent, name="medcalc", params_model=MedCalcEv
         return "\n\n".join(parts)
 
     # ----------------------------------------------------------
-    # LLM 答案提取
+    # LLM answer extraction
     # ----------------------------------------------------------
 
     async def _extract_answer(self, response_text: str) -> Optional[str]:
-        """调用 LLM 从自然语言回复中提取结构化答案"""
+        """Call LLM to extract structured answer from natural language response"""
         prompt = EXTRACTION_PROMPT.format(
-            response_text=response_text[:3000],  # 截断避免过长
+            response_text=response_text[:3000],  # Truncate to avoid excessive length
             output_type=self.config.output_type,
         )
 
@@ -244,19 +244,19 @@ class MedCalcEvalAgent(AbstractEvalAgent, name="medcalc", params_model=MedCalcEv
                     return str(parsed["answer"]).strip()
 
                 logger.warning(
-                    "[MedCalcEval] 提取输出格式异常 (attempt %d/%d): %s",
+                    "[MedCalcEval] Extraction output format error (attempt %d/%d): %s",
                     attempt + 1,
                     max_retries,
                     result.content[:200],
                 )
             except Exception as e:
-                logger.warning("[MedCalcEval] 提取调用失败 (attempt %d/%d): %s", attempt + 1, max_retries, e)
+                logger.warning("[MedCalcEval] Extraction call failed (attempt %d/%d): %s", attempt + 1, max_retries, e)
 
         return None
 
     @staticmethod
     def _parse_json_response(text: str) -> Optional[dict]:
-        """从 LLM 响应中提取 JSON"""
+        """Extract JSON from LLM response"""
         cleaned = re.sub(r"^```json\s*|\s*```$", "", text.strip())
         try:
             return json.loads(cleaned)
@@ -264,11 +264,11 @@ class MedCalcEvalAgent(AbstractEvalAgent, name="medcalc", params_model=MedCalcEv
             return None
 
     # ----------------------------------------------------------
-    # 类型化匹配
+    # Typed matching
     # ----------------------------------------------------------
 
     def _match_answer(self, extracted: str) -> tuple[bool, str]:
-        """根据 output_type 路由到对应匹配方法"""
+        """Route to matching method based on output_type"""
         output_type = self.config.output_type
         if output_type == "decimal":
             return self._match_decimal(extracted)
@@ -279,76 +279,76 @@ class MedCalcEvalAgent(AbstractEvalAgent, name="medcalc", params_model=MedCalcEv
         elif output_type == "weeks_days":
             return self._match_weeks_days(extracted)
         else:
-            return False, f"未知 output_type: {output_type}"
+            return False, f"Unknown output_type: {output_type}"
 
     def _match_decimal(self, extracted: str) -> tuple[bool, str]:
-        """decimal 匹配 — 答案落在 [lower_limit, upper_limit] 区间内"""
+        """decimal matching — answer falls within [lower_limit, upper_limit] range"""
         try:
             answer = float(extracted.replace(",", ""))
         except ValueError:
-            return False, f"无法解析为数字: {extracted}"
+            return False, f"Cannot parse as number: {extracted}"
 
         try:
             lower = float(self.config.lower_limit)
             upper = float(self.config.upper_limit)
         except ValueError:
-            return False, f"容差范围配置异常: lower={self.config.lower_limit}, upper={self.config.upper_limit}"
+            return False, f"Tolerance range config error: lower={self.config.lower_limit}, upper={self.config.upper_limit}"
 
         is_correct = lower <= answer <= upper
-        detail = f"范围匹配: {answer} {'∈' if is_correct else '∉'} [{lower}, {upper}]"
+        detail = f"Range match: {answer} {'in' if is_correct else 'not in'} [{lower}, {upper}]"
         return is_correct, detail
 
     def _match_integer(self, extracted: str) -> tuple[bool, str]:
-        """integer 匹配 — 四舍五入后精确匹配"""
+        """integer matching — exact match after rounding"""
         try:
             answer = round(float(extracted.replace(",", "")))
         except ValueError:
-            return False, f"无法解析为数字: {extracted}"
+            return False, f"Cannot parse as number: {extracted}"
 
         try:
             ground_truth = int(float(self.config.ground_truth))
         except ValueError:
-            return False, f"标准答案非整数: {self.config.ground_truth}"
+            return False, f"Standard answer is not integer: {self.config.ground_truth}"
 
         is_correct = answer == ground_truth
-        detail = f"整数匹配: {answer} {'==' if is_correct else '!='} {ground_truth}"
+        detail = f"Integer match: {answer} {'==' if is_correct else '!='} {ground_truth}"
         return is_correct, detail
 
     def _match_date(self, extracted: str) -> tuple[bool, str]:
-        """date 匹配 — 标准化 MM/DD/YYYY 后精确比对"""
+        """date matching — exact comparison after MM/DD/YYYY normalization"""
         try:
             answer_date = datetime.strptime(extracted.strip(), "%m/%d/%Y")
             answer_normalized = answer_date.strftime("%-m/%-d/%Y")
         except ValueError:
-            return False, f"无法解析日期: {extracted}"
+            return False, f"Cannot parse date: {extracted}"
 
         try:
             gt_date = datetime.strptime(self.config.ground_truth.strip(), "%m/%d/%Y")
             gt_normalized = gt_date.strftime("%-m/%-d/%Y")
         except ValueError:
-            return False, f"标准答案日期格式异常: {self.config.ground_truth}"
+            return False, f"Standard answer date format error: {self.config.ground_truth}"
 
         is_correct = answer_normalized == gt_normalized
-        detail = f"日期匹配: {answer_normalized} {'==' if is_correct else '!='} {gt_normalized}"
+        detail = f"Date match: {answer_normalized} {'==' if is_correct else '!='} {gt_normalized}"
         return is_correct, detail
 
     def _match_weeks_days(self, extracted: str) -> tuple[bool, str]:
-        """weeks_days 匹配 — 标准化后精确比对"""
+        """weeks_days matching — exact comparison after normalization"""
         answer_norm = self._normalize_weeks_days(extracted)
         gt_norm = self._normalize_weeks_days(self.config.ground_truth)
 
         if answer_norm is None:
-            return False, f"无法解析周/天格式: {extracted}"
+            return False, f"Cannot parse weeks/days format: {extracted}"
         if gt_norm is None:
-            return False, f"标准答案周/天格式异常: {self.config.ground_truth}"
+            return False, f"Standard answer weeks/days format error: {self.config.ground_truth}"
 
         is_correct = answer_norm == gt_norm
-        detail = f"周天匹配: {answer_norm} {'==' if is_correct else '!='} {gt_norm}"
+        detail = f"Weeks/days match: {answer_norm} {'==' if is_correct else '!='} {gt_norm}"
         return is_correct, detail
 
     @staticmethod
     def _normalize_weeks_days(text: str) -> Optional[tuple[int, int]]:
-        """标准化 "X weeks, Y days" 为 (weeks, days) 元组"""
+        """Normalize "X weeks, Y days" to (weeks, days) tuple"""
         text = text.lower().strip()
         match = re.search(r"(\d+)\s*weeks?\s*[,\s]*(\d+)\s*days?", text)
         if match:

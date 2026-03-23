@@ -1,11 +1,11 @@
-"""Guides API 测试"""
+"""Guides API tests"""
 
 import pytest
 
 
 @pytest.mark.asyncio
 async def test_list_guides(client):
-    """GET /api/guides 返回指南列表"""
+    """GET /api/guides returns guide list"""
     resp = await client.get("/api/guides")
     assert resp.status_code == 200
     data = resp.json()
@@ -18,7 +18,7 @@ async def test_list_guides(client):
 
 @pytest.mark.asyncio
 async def test_get_guide(client):
-    """GET /api/guides/{name} 返回指南内容"""
+    """GET /api/guides/{name} returns guide content"""
     resp = await client.get("/api/guides/develop-eval-agent")
     assert resp.status_code == 200
     data = resp.json()
@@ -29,6 +29,6 @@ async def test_get_guide(client):
 
 @pytest.mark.asyncio
 async def test_get_guide_not_found(client):
-    """GET /api/guides/{name} — 不存在时返回 404"""
+    """GET /api/guides/{name} returns 404 when not found"""
     resp = await client.get("/api/guides/nonexistent-guide")
     assert resp.status_code == 404

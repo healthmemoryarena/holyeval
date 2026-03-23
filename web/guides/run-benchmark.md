@@ -1,17 +1,17 @@
-# Benchmark 跑分
+# Benchmark Scoring
 
-> **在 Claude Code 中使用**: 输入 `/run-benchmark`，后跟你的跑分需求（如 `healthbench sample --target-model gpt-4.1`、指定并发数），Claude 会自动配置并执行跑分。
+> **Using in Claude Code**: Type `/run-benchmark`, followed by your benchmarking requirements (e.g., `healthbench sample --target-model gpt-4.1`, specify concurrency). Claude will automatically configure and execute the benchmark run.
 
-## 概述
+## Overview
 
-Benchmark 跑分对数据集中的所有用例批量执行评测，生成包含通过率、分数分布、成本统计的结构化报告。支持 CLI 和 Web UI 两种方式。
+Benchmark scoring batch-executes evaluations for all cases in a dataset, generating structured reports containing pass rates, score distributions, and cost statistics. Both CLI and Web UI methods are supported.
 
-## CLI 跑分
+## CLI Benchmarking
 
-### 基本用法
+### Basic Usage
 
 ```bash
-# 语法: python -m benchmark.basic_runner <benchmark> <dataset> --target-type <type> --target-model <model> [options]
+# Syntax: python -m benchmark.basic_runner <benchmark> <dataset> --target-type <type> --target-model <model> [options]
 
 # HealthBench
 python -m benchmark.basic_runner healthbench sample --target-type llm_api --target-model gpt-4.1
@@ -21,94 +21,94 @@ python -m benchmark.basic_runner healthbench hard --target-type llm_api --target
 python -m benchmark.basic_runner medcalc sample --target-type llm_api --target-model gpt-4.1
 python -m benchmark.basic_runner medcalc full --target-type llm_api --target-model gpt-4.1 --limit 50
 
-# AgentClinic — 多专科临床诊断
+# AgentClinic — Multi-specialty clinical diagnosis
 python -m benchmark.basic_runner agentclinic medqa --target-model gpt-4.1
 python -m benchmark.basic_runner agentclinic nejm --target-model gpt-4.1
 
-# MedHall — 医疗幻觉检测（默认 theta_api，email 从用例 target_overrides 读取）
+# MedHall — Medical hallucination detection (default theta_api, email read from case target_overrides)
 python -m benchmark.basic_runner medhall sample
-python -m benchmark.basic_runner medhall sample --target-model general   # 切换 Agent 类型
+python -m benchmark.basic_runner medhall sample --target-model general   # Switch Agent type
 
-# MedHall — 对比 LLM（需将 metadata.json 中 target.type 改为 llm_api）
+# MedHall — Compare with LLM (requires changing target.type to llm_api in metadata.json)
 # python -m benchmark.basic_runner medhall sample --target-model gpt-4.1
 
-# Extraction（target 由 metadata 锁定，不需要指定）
+# Extraction (target is locked by metadata, no need to specify)
 python -m benchmark.basic_runner extraction simple
 
-# MemoryArena — Agent 多子任务记忆评测
+# MemoryArena — Agent multi-subtask memory evaluation
 python -m benchmark.basic_runner memoryarena sample --target-model gpt-4.1
 ```
 
-### 选项
+### Options
 
-| 选项 | 说明 |
+| Option | Description |
 |------|------|
-| `--target-type` | 被测系统类型（`llm_api` / `theta_api`），**多数 benchmark 必填** |
-| `--target-model` | 模型名称（如 `gpt-4.1`、`gemini-3-pro`） |
-| `--limit N` | 只跑前 N 条用例 |
-| `--ids x,y,z` | 指定用例 ID |
-| `-p N` | 并发数（默认 1） |
-| `-v` | 详细日志 |
+| `--target-type` | System-under-test type (`llm_api` / `theta_api`), **required for most benchmarks** |
+| `--target-model` | Model name (e.g., `gpt-4.1`, `gemini-3-pro`) |
+| `--limit N` | Run only the first N cases |
+| `--ids x,y,z` | Specify case IDs |
+| `-p N` | Concurrency level (default 1) |
+| `-v` | Verbose logging |
 
-### 组合示例
+### Combined Examples
 
 ```bash
-# 指定 ID + 详细日志
+# Specify IDs + verbose logging
 python -m benchmark.basic_runner healthbench sample --target-type llm_api --target-model gpt-4.1 --ids hb_abc,hb_def -v
 
-# 限制数量 + 并发
+# Limit count + concurrency
 python -m benchmark.basic_runner medcalc full --target-type llm_api --target-model gpt-4.1 --limit 10 -p 3 -v
 ```
 
-## Web UI 跑分
+## Web UI Benchmarking
 
-1. 启动 Web 服务: `python -m web`
-2. 访问 http://localhost:8000
-3. 在 **执行评测** 页面选择 benchmark 和 dataset
-4. 配置 target 参数（类型、模型）和并发数
-5. 点击创建任务，SSE 实时推送进度
+1. Start the web server: `python -m web`
+2. Navigate to http://localhost:8000
+3. On the **Run Evaluations** page, select a benchmark and dataset
+4. Configure target parameters (type, model) and concurrency
+5. Click to create the task; progress is pushed in real time via SSE
 
-Web UI 提供：
-- 实时进度跟踪（SSE 推送）
-- 单个用例对话过程查看
-- 任务取消功能
-- 完成后自动生成报告
+The Web UI provides:
+- Real-time progress tracking (SSE push)
+- Per-case conversation process viewing
+- Task cancellation
+- Automatic report generation upon completion
 
-## 报告
+## Reports
 
-### 报告位置
+### Report Location
 
 ```
 benchmark/report/<benchmark>/<dataset>_<target>_<timestamp>.json
 ```
 
-示例: `benchmark/report/healthbench/sample_gpt-4.1_20260213_183356.json`
+Example: `benchmark/report/healthbench/sample_gpt-4.1_20260213_183356.json`
 
-### 报告内容
+### Report Contents
 
-- 总通过率和平均分
-- 每个用例的 pass/fail、score、feedback
-- 对话轮次统计
-- 成本统计（test / eval / target）
+- Overall pass rate and average score
+- Per-case pass/fail, score, and feedback
+- Conversation turn statistics
+- Cost statistics (test / eval / target)
 
-### 查看报告
+### Viewing Reports
 
-- **CLI**: 报告在跑分结束后输出到终端
-- **Web UI**: 在执行评测页面底部的「历史报告」列表中查看，支持按 benchmark 和文件名筛选
+- **CLI**: Reports are printed to the terminal after benchmarking completes
+- **Web UI**: View in the "Historical Reports" list at the bottom of the Run Evaluations page; supports filtering by benchmark and filename
 
-## 可用数据集
+## Available Datasets
 
-| 评测套件 | 数据集 | 用例数 | 评估器 | 说明 |
+| Benchmark Suite | Dataset | Case Count | Evaluator | Description |
 |----------|--------|--------|--------|------|
-| healthbench | sample | 100 | healthbench | 按主题等比抽样，快速验证 |
-| healthbench | hard | 1,000 | healthbench | 高难度子集 |
-| healthbench | consensus | 3,671 | healthbench | 医生共识子集 |
-| healthbench | full | 5,000 | healthbench | 完整数据集 |
-| medcalc | sample | 5 | medcalc | 覆盖多种计算器类型 |
-| medcalc | full | ~1,047 | medcalc | 完整测试集 |
-| agentclinic | medqa | 107 | preset_answer | USMLE 多专科 OSCE 临床诊断 |
-| agentclinic | nejm | 15 | preset_answer | NEJM 病例 MCQ 诊断 |
-| medhall | sample | 30 | hallucination | 医疗幻觉检测（事实/上下文/引用），默认 theta_api |
-| extraction | simple | 9 | preset_answer | 健康数据提取 |
-| memoryarena | sample | 10 | memoryarena | 按领域等比抽样 |
-| memoryarena | full | 701 | memoryarena | 5 领域全量（shopping/travel/search/math/physics） |
+| healthbench | sample | 100 | healthbench | Proportionally sampled by topic, quick validation |
+| healthbench | hard | 1,000 | healthbench | High-difficulty subset |
+| healthbench | consensus | 3,671 | healthbench | Physician consensus subset |
+| healthbench | full | 5,000 | healthbench | Full dataset |
+| medcalc | sample | 5 | medcalc | Covers multiple calculator types |
+| medcalc | full | ~1,047 | medcalc | Full test set |
+| agentclinic | medqa | 107 | preset_answer | USMLE multi-specialty OSCE clinical diagnosis |
+| agentclinic | nejm | 15 | preset_answer | NEJM case MCQ diagnosis |
+| medhall | sample | 30 | hallucination | Medical hallucination detection (factual/contextual/citation), default theta_api |
+| extraction | simple | 9 | preset_answer | Health data extraction |
+| memoryarena | sample | 10 | memoryarena | Proportionally sampled by domain |
+| memoryarena | full | 701 | memoryarena | All 5 domains (shopping/travel/search/math/physics) |

@@ -1,4 +1,4 @@
-"""任务执行 / 进度 / 取消 / 检查点 API"""
+"""Task execution / progress / cancellation / checkpoint API"""
 
 from __future__ import annotations
 
@@ -16,22 +16,22 @@ router = APIRouter(tags=["tasks"])
 
 @router.post("/tasks", response_model=TaskSummary)
 async def create_task(req: TaskCreateRequest):
-    # 检查 benchmark 是否正在准备中
+    # Check if benchmark is being prepared
     if prepare_manager.is_preparing(req.benchmark):
-        raise HTTPException(status_code=409, detail=f"benchmark '{req.benchmark}' 正在准备数据，请稍后再试")
+        raise HTTPException(status_code=409, detail=f"Benchmark '{req.benchmark}' is preparing data, please try again later")
 
-    # 查找 benchmark 元数据获取 TargetSpec
+    # Find benchmark metadata to get TargetSpec
     benchmarks = list_benchmarks()
     bm = next((b for b in benchmarks if b.name == req.benchmark), None)
     if not bm:
-        raise HTTPException(status_code=400, detail=f"benchmark '{req.benchmark}' 不存在")
+        raise HTTPException(status_code=400, detail=f"Benchmark not found: '{req.benchmark}'")
 
     try:
         spec = find_target_spec(bm.target, req.target_type)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # 前端传入的 target dict 作为 cli_overrides（仅 editable 字段生效）
+    # Frontend target dict used as cli_overrides (only editable fields take effect)
     cli_overrides = req.target
     try:
         resolve_runtime_target(spec, cli_overrides)
@@ -66,9 +66,9 @@ async def create_task(req: TaskCreateRequest):
 
 @router.post("/eval-check", response_model=EvalCheckResponse)
 async def check_eval(req: EvalCheckRequest):
-    """校验提交结果与数据集的匹配情况（不启动评测）"""
+    """Validate submitted results against dataset (without starting evaluation)"""
     if prepare_manager.is_preparing(req.benchmark):
-        raise HTTPException(status_code=409, detail=f"benchmark '{req.benchmark}' 正在准备数据，请稍后再试")
+        raise HTTPException(status_code=409, detail=f"Benchmark '{req.benchmark}' is preparing data, please try again later")
 
     try:
         validation = task_manager.check_eval(
@@ -84,9 +84,9 @@ async def check_eval(req: EvalCheckRequest):
 
 @router.post("/eval-only", response_model=EvalOnlyResponse)
 async def create_eval_only_task(req: EvalOnlyRequest):
-    """创建 eval-only 评测任务 — 接收外部调用结果，仅跑评测（含校验）"""
+    """Create eval-only task -- accept external call results and run evaluation only (with validation)"""
     if prepare_manager.is_preparing(req.benchmark):
-        raise HTTPException(status_code=409, detail=f"benchmark '{req.benchmark}' 正在准备数据，请稍后再试")
+        raise HTTPException(status_code=409, detail=f"Benchmark '{req.benchmark}' is preparing data, please try again later")
 
     try:
         entry, validation = await task_manager.create_eval_task(
@@ -134,7 +134,7 @@ async def get_task(task_id: str):
     try:
         snapshot = task_manager.get_snapshot(task_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
     return TaskDetail(
         task_id=snapshot["id"],
@@ -155,21 +155,21 @@ async def get_task(task_id: str):
 
 @router.get("/tasks/{task_id}/cases/{case_id}")
 async def get_case_result(task_id: str, case_id: str):
-    """获取单个 case 的实时结果（从运行中的 CaseContext 或已完成的 result）"""
+    """Get real-time result for a single case (from running CaseContext or completed result)"""
     from web.app.services.task_manager import read_live_file
 
     entry = task_manager.get_task(task_id)
     if not entry:
-        raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
     if not entry.session:
-        raise HTTPException(status_code=410, detail="任务已完成，请从报告中查看结果")
+        raise HTTPException(status_code=410, detail="Task completed, view results in reports")
     ctx = entry.session.contexts.get(case_id)
     if not ctx:
-        raise HTTPException(status_code=404, detail=f"用例不存在: {case_id}")
+        raise HTTPException(status_code=404, detail=f"Case not found: {case_id}")
     if ctx.result:
         return {"status": ctx.status.value, "result": ctx.result.model_dump(mode="json")}
 
-    # 执行中的用例 — 从 live 文件读取对话数据
+    # Running case -- read conversation data from live file
     live_data = read_live_file(task_id, case_id)
     if live_data:
         return {"status": ctx.status.value, "result": live_data}
@@ -184,25 +184,25 @@ async def get_task_results(
     page_size: int = 20,
     tag: str | None = None,
 ):
-    """获取任务的分页评测结果（从内存或报告文件）"""
+    """Get paginated evaluation results for a task (from memory or report file)"""
     entry = task_manager.get_task(task_id)
     if not entry:
-        raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
-    # 收集结果列表
+    # Collect results list
     results: list[dict] = []
     if entry.eval_results:
         results = [r.model_dump(mode="json") for r in entry.eval_results]
     elif entry.session and entry.status == "completed":
-        # 从 session contexts 中收集
+        # Collect from session contexts
         for ctx in entry.session.contexts.values():
             if ctx.result:
                 results.append(ctx.result.model_dump(mode="json"))
-        # 合并恢复的结果
+        # Merge resumed results
         for r in entry.resumed_results:
             results.append(r.model_dump(mode="json"))
     elif entry.report_path:
-        # 从报告文件读取
+        # Read from report file
         import json
         from pathlib import Path
 
@@ -216,7 +216,7 @@ async def get_task_results(
     if not results:
         return {"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
 
-    # 按 tag 过滤
+    # Filter by tag
     if tag:
         results = [r for r in results if tag in r.get("tags", [])]
 
@@ -239,16 +239,16 @@ async def cancel_task(task_id: str):
     try:
         task_manager.cancel_task(task_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
     return {"status": "cancelling", "task_id": task_id}
 
 
-# ==================== 检查点 API ====================
+# ==================== Checkpoint API ====================
 
 
 @router.get("/checkpoints", response_model=list[CheckpointSummary])
 async def list_checkpoints(benchmark: str | None = None):
-    """列出可恢复的检查点"""
+    """List resumable checkpoints"""
     checkpoints = task_manager.list_checkpoints(benchmark)
     return [
         CheckpointSummary(
@@ -266,17 +266,17 @@ async def list_checkpoints(benchmark: str | None = None):
 
 @router.post("/checkpoints/{session_id}/resume", response_model=TaskSummary)
 async def resume_checkpoint(session_id: str):
-    """恢复检查点任务"""
+    """Resume a checkpoint task"""
     try:
         meta, _ = CheckpointManager.load(session_id)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"检查点不存在: {session_id}")
+        raise HTTPException(status_code=404, detail=f"Checkpoint not found: {session_id}")
 
-    # 查找 TargetSpec
+    # Find TargetSpec
     benchmarks = list_benchmarks()
     bm = next((b for b in benchmarks if b.name == meta.benchmark), None)
     if not bm:
-        raise HTTPException(status_code=400, detail=f"benchmark '{meta.benchmark}' 不存在")
+        raise HTTPException(status_code=400, detail=f"Benchmark not found: '{meta.benchmark}'")
 
     try:
         spec = find_target_spec(bm.target, meta.target_type)
@@ -303,7 +303,7 @@ async def resume_checkpoint(session_id: str):
 
 @router.delete("/checkpoints/{session_id}")
 async def delete_checkpoint(session_id: str):
-    """删除检查点（放弃恢复）"""
+    """Delete a checkpoint (abandon resume)"""
     mgr = CheckpointManager(session_id)
     mgr.cleanup()
     return {"status": "deleted", "session_id": session_id}

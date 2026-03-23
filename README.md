@@ -1,8 +1,10 @@
 # HolyEval
 
-**Reproduce any LLM benchmark with one command. Build your own with pluggable agents.**
+**Reproduce any LLM benchmark with one command. Build your own with pluggable agents. No code required — just talk to Claude Code.**
 
-HolyEval is an open-source evaluation framework for large language models. Drop in a benchmark dataset, run one command, get a scored report. Extend it with custom evaluators, target systems, and virtual users via a pluggable agent architecture.
+HolyEval is an AI-native, open-source evaluation framework for large language models. Drop in a benchmark dataset, run one command, get a scored report. Extend it with custom evaluators, target systems, and virtual users via a pluggable agent architecture.
+
+HolyEval is built from the ground up as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) native project. Every workflow — from initial setup to integrating a new benchmark from a research paper — is available as an interactive slash command. You describe what you want in natural language, and Claude Code handles the rest: reading papers, writing converters, scaffolding plugins, running tests. **You don't need to write a single line of code to use or extend this framework.**
 
 ```bash
 # Reproduce HealthBench (medical AI, 100 cases) — one command
@@ -26,16 +28,23 @@ Each benchmark is a published paper you can reproduce in one line.
 | **Multi-turn dialogue** | Simulates real user conversations, not just single-turn Q&A |
 | **Batch execution** | Concurrent runs with real-time progress, cancellation, and checkpoint resume |
 | **Web UI** | Visual dashboard for running evaluations, viewing reports, and browsing datasets |
+| **AI-native** | Built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — set up, run, and extend the project through natural language, zero boilerplate |
 
 ## Quick Start
 
-### Prerequisites
+### Option A: AI-guided setup (recommended)
 
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/) package manager
-- At least one LLM API key (OpenAI or Google Gemini)
+Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code), then:
 
-### Install
+```
+/quick-start
+```
+
+Claude Code will check your environment, install dependencies, walk you through API key configuration, and launch the Web UI. No manual steps needed.
+
+### Option B: Manual setup
+
+**Prerequisites:** Python 3.11+, [uv](https://docs.astral.sh/uv/) package manager, at least one LLM API key (OpenAI or Google Gemini).
 
 ```bash
 git clone https://github.com/anthropics/holyeval.git
@@ -64,6 +73,61 @@ python -m benchmark.basic_runner healthbench sample --resume
 ```bash
 python -m web    # http://localhost:8000
 ```
+
+## AI-Native Development with Claude Code
+
+HolyEval is designed to be operated entirely through [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Every common task — from project setup, to running evaluations, to integrating a brand-new benchmark from a research paper — has a dedicated slash command. You describe your intent in natural language; Claude Code reads the code, generates files, runs tests, and validates the result.
+
+**You don't need to memorize CLI flags, read source code, or write boilerplate.** Just type the slash command and follow the conversation.
+
+### Slash Command Reference
+
+| What you want to do | Command | What Claude Code does for you |
+|---|---|---|
+| **Set up the project** | `/quick-start` | Checks Python/uv, installs dependencies, configures `.env` with your API keys, launches Web UI — fully interactive, no manual steps |
+| **Run a benchmark** | `/run-benchmark` | Asks which benchmark & dataset, then executes with your chosen model, concurrency, and limits. Shows progress and report path |
+| **Integrate a new benchmark** | `/add-benchmark` | End-to-end: reads the paper/repo → analyzes data format → writes the data converter → creates `metadata.json` + JSONL → validates with a test run |
+| **Add a custom evaluator** | `/add-eval-agent` | Gathers your evaluation logic requirements → scaffolds config model + plugin implementation + registration. Immediately available in CLI & Web UI |
+| **Add a new target system** | `/add-target-agent` | Scaffolds connection handling, message processing, and cleanup for a new system under test |
+| **Run end-to-end tests** | `/run-e2e-test` | Verifies all components (TestAgent ↔ TargetAgent ↔ EvalAgent ↔ Orchestrator) work together |
+| **Audit architecture** | `/review-architecture` | Checks GitOps compliance, plugin isolation, shared-layer reuse. Reports violations with fix suggestions |
+
+### Example Workflows
+
+**"I want to reproduce HealthBench on GPT-4.1"**
+```
+> /run-benchmark
+# Claude asks: which benchmark? → healthbench
+# Which dataset? → sample
+# Which model? → gpt-4.1
+# Running... 100 cases, 5 concurrent → report saved
+```
+
+**"I found a new medical benchmark paper, I want to add it"**
+```
+> /add-benchmark
+# Claude reads the paper/repo, asks you to confirm:
+#   - benchmark name, data format, evaluation method
+# Then auto-generates:
+#   - generator/<name>/converter.py (data conversion)
+#   - benchmark/data/<name>/metadata.json + dataset.jsonl
+#   - validates with a test run
+# Done — new benchmark works in CLI and Web UI immediately
+```
+
+**"I need a custom evaluator that checks citation accuracy"**
+```
+> /add-eval-agent
+# Claude asks: plugin name? → citation_accuracy
+# What does it evaluate? → checks if AI responses cite valid sources
+# Config fields needed? → threshold (float), source_list (list)
+# Generates:
+#   - evaluator/plugin/eval_agent/citation_accuracy_eval_agent.py
+#   - registered automatically via __init_subclass__
+# Ready to use in any benchmark or test case
+```
+
+> **Tip:** You're not limited to slash commands. Claude Code understands the full codebase — you can ask it anything in natural language, like *"explain how the plugin system works"* or *"why did this test case fail?"*.
 
 ## Architecture
 
@@ -234,26 +298,16 @@ ruff check .
 ruff format .
 ```
 
-### Claude Code Skills
-
-| Command | Description |
-|---------|-------------|
-| `/quick-start` | Project initialization guide |
-| `/add-benchmark` | Integrate an external benchmark (paper → data → validate) |
-| `/add-eval-agent` | Scaffold a new evaluator plugin |
-| `/add-target-agent` | Scaffold a new target system plugin |
-| `/run-benchmark` | Run benchmark tests |
-| `/run-e2e-test` | Run end-to-end tests |
-| `/review-architecture` | Review architecture health |
-
 ## Contributing
 
-Contributions are welcome! Here's how to get started:
+Contributions are welcome! The easiest way to contribute is through Claude Code — every workflow below has a guided slash command:
 
-1. **Add a benchmark** — The fastest way to contribute. Use `/add-benchmark` or follow the manual steps above.
-2. **Add an evaluator** — Implement a new `EvalAgent` plugin for a different evaluation methodology.
-3. **Add a target** — Implement a new `TargetAgent` plugin to evaluate different systems.
-4. **Improve existing benchmarks** — More test cases, better prompts, edge cases.
+| Contribution type | How to start | Difficulty |
+|---|---|---|
+| **Add a benchmark** | `/add-benchmark` — the fastest way to contribute | Easy |
+| **Add an evaluator** | `/add-eval-agent` — scaffold a new scoring methodology | Medium |
+| **Add a target system** | `/add-target-agent` — connect a new API/service to evaluate | Medium |
+| **Improve existing benchmarks** | Add more test cases, edge cases, or better prompts | Easy |
 
 Please open an issue first to discuss significant changes.
 

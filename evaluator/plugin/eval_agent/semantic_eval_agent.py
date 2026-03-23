@@ -1,48 +1,48 @@
 """
-SemanticEvalAgent — 基于 LLM 的通用语义评估器
+SemanticEvalAgent — LLM-based general-purpose semantic evaluator
 
-注册名称: "semantic"
+Registered name: "semantic"
 
-工作原理:
-1. 从 TestAgent 和 TargetAgent 的 memory_list 中提取完整对话历史
-2. 根据配置的评估维度（criteria）构建评估 prompt
-3. 调用 gpt-5.2 对各维度独立打分（0-100）
-4. 加权计算总分，与阈值比较决定 pass / fail
+How it works:
+1. Extract full conversation history from TestAgent and TargetAgent memory_list
+2. Build evaluation prompt based on configured evaluation dimensions (criteria)
+3. Call gpt-5.2 to score each dimension independently (0-100)
+4. Calculate weighted total score, compare with threshold for pass / fail
 
-配置示例（SemanticEvalInfo）:
+Config example (SemanticEvalInfo):
 {
     "evaluator": "semantic",
     "criteria": [
         {
             "name": "goal_completion",
-            "display_name": "目标达成度",
-            "description": "用户的目标是否在对话中被有效解决",
+            "display_name": "Goal Completion",
+            "description": "Whether the user's goal was effectively resolved in the conversation",
             "weight": 40,
-            "evaluation_points": ["是否理解了用户诉求", "是否给出了有效回应"]
+            "evaluation_points": ["Whether user's request was understood", "Whether an effective response was given"]
         },
         {
             "name": "response_quality",
-            "display_name": "回答质量",
-            "description": "回答是否准确、完整、专业",
+            "display_name": "Response Quality",
+            "description": "Whether the response is accurate, complete, and professional",
             "weight": 35
         },
         {
             "name": "communication_experience",
-            "display_name": "沟通体验",
-            "description": "交互是否自然、友好、高效",
+            "display_name": "Communication Experience",
+            "description": "Whether the interaction is natural, friendly, and efficient",
             "weight": 25
         }
     ],
     "threshold": 0.7
 }
 
-未配置 criteria 时使用默认三维度（目标达成度40%+回答质量35%+沟通体验25%）。
+When criteria is not configured, uses default three dimensions (Goal Completion 40% + Response Quality 35% + Communication Experience 25%).
 
-集成测试:
+Integration test:
     agent = SemanticEvalAgent(SemanticEvalInfo())
     result = await agent.evaluate(
-        conversation_text="用户: 我头疼\\n\\nAI助手: 请问持续多久了？",
-        user_goal="咨询头疼的原因",
+        conversation_text="User: I have a headache\\n\\nAI Assistant: How long has it lasted?",
+        user_goal="Ask about the cause of headache",
     )
 """
 
@@ -67,50 +67,50 @@ DEFAULT_MODEL = "gpt-5.2"
 
 
 # ============================================================
-# 评估配置模型
+# Evaluation config model
 # ============================================================
 
 
 class EvalCriterion(BaseModel):
-    """单个评估维度配置"""
+    """Single evaluation dimension config"""
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(description="维度标识名称（英文）")
-    display_name: str = Field(default="", description="维度展示名称")
-    description: str = Field(default="", description="维度评估说明")
-    weight: int = Field(default=0, ge=0, le=100, description="权重百分比（0-100）")
-    evaluation_points: List[str] = Field(default_factory=list, description="具体检查要点")
+    name: str = Field(description="Dimension identifier (English)")
+    display_name: str = Field(default="", description="Dimension display name")
+    description: str = Field(default="", description="Dimension evaluation description")
+    weight: int = Field(default=0, ge=0, le=100, description="Weight percentage (0-100)")
+    evaluation_points: List[str] = Field(default_factory=list, description="Specific checkpoints")
 
 
-# 语义评估默认三维度
+# Semantic evaluation default three dimensions
 _DEFAULT_SEMANTIC_CRITERIA = [
     EvalCriterion(
         name="goal_completion",
-        display_name="目标达成度",
-        description="用户的目标是否在对话中被有效解决或推进",
+        display_name="Goal Completion",
+        description="Whether the user's goal was effectively resolved or advanced in the conversation",
         weight=40,
     ),
     EvalCriterion(
         name="response_quality",
-        display_name="回答质量",
-        description="回答是否准确、完整、专业",
+        display_name="Response Quality",
+        description="Whether the response is accurate, complete, and professional",
         weight=35,
     ),
     EvalCriterion(
         name="communication_experience",
-        display_name="沟通体验",
-        description="交互是否自然、友好、高效",
+        display_name="Communication Experience",
+        description="Whether the interaction is natural, friendly, and efficient",
         weight=25,
     ),
 ]
 
 
 class SemanticEvalInfo(BaseModel):
-    """语义评估配置 — 基于 LLM 的多维度语义评估（通用，适合大部分场景）
+    """Semantic evaluation config — LLM-based multi-dimensional semantic evaluation (general-purpose, suitable for most scenarios)
 
-    LLM 根据评估维度（criteria）对 AI 助手的表现独立打分（0-100），
-    加权计算总分后与阈值比较决定 pass / fail。
+    LLM independently scores the AI assistant's performance on each evaluation dimension (0-100),
+    then calculates a weighted total score compared with threshold for pass / fail.
     """
 
     model_config = ConfigDict(
@@ -118,35 +118,35 @@ class SemanticEvalInfo(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "_comment": "使用默认三维度（目标达成度40%+回答质量35%+沟通体验25%），阈值0.7",
+                    "_comment": "Uses default three dimensions (Goal Completion 40% + Response Quality 35% + Communication Experience 25%), threshold 0.7",
                     "evaluator": "semantic",
                 },
                 {
-                    "_comment": "针对症状分诊场景的自定义评估维度",
+                    "_comment": "Custom evaluation dimensions for symptom triage scenarios",
                     "evaluator": "semantic",
                     "model": "gpt-5.2",
                     "criteria": [
                         {
                             "name": "triage_accuracy",
-                            "display_name": "分诊准确性",
-                            "description": "AI 是否正确识别了症状的紧急程度并给出合理的科室建议",
+                            "display_name": "Triage Accuracy",
+                            "description": "Whether the AI correctly identified symptom urgency and gave reasonable department suggestions",
                             "weight": 50,
                             "evaluation_points": [
-                                "是否识别了危险信号（如胸痛、呼吸困难等）",
-                                "建议的就医科室是否合理",
-                                "是否区分了紧急和非紧急情况",
+                                "Whether danger signals were identified (e.g. chest pain, breathing difficulty)",
+                                "Whether suggested departments are reasonable",
+                                "Whether urgent and non-urgent situations are distinguished",
                             ],
                         },
                         {
                             "name": "information_gathering",
-                            "display_name": "信息收集能力",
-                            "description": "AI 是否通过有效追问收集了足够的诊断信息",
+                            "display_name": "Information Gathering",
+                            "description": "Whether the AI collected sufficient diagnostic information through effective follow-up questions",
                             "weight": 30,
                         },
                         {
                             "name": "safety",
-                            "display_name": "安全性",
-                            "description": "AI 是否避免了不当诊断、是否建议了必要的就医",
+                            "display_name": "Safety",
+                            "description": "Whether the AI avoided inappropriate diagnoses and recommended necessary medical visits",
                             "weight": 20,
                         },
                     ],
@@ -156,46 +156,46 @@ class SemanticEvalInfo(BaseModel):
         },
     )
 
-    evaluator: Literal["semantic"] = Field(default="semantic", description="评估器类型")
-    model: Optional[str] = Field(None, description="EvalAgent 使用的 LLM 模型（默认 gpt-5.2）")
+    evaluator: Literal["semantic"] = Field(default="semantic", description="Evaluator type")
+    model: Optional[str] = Field(None, description="LLM model for EvalAgent (default gpt-5.2)")
     criteria: List[EvalCriterion] = Field(
         default_factory=lambda: [c.model_copy() for c in _DEFAULT_SEMANTIC_CRITERIA],
         description=(
-            "评估维度列表，每个维度包含：\n"
-            "  name: str（英文标识），display_name: str（中文展示名），\n"
-            "  description: str（评估说明），weight: int（权重0-100），\n"
-            "  evaluation_points: List[str]（可选，具体检查要点）\n"
-            "不传时使用默认三维度：目标达成度(40%) + 回答质量(35%) + 沟通体验(25%)"
+            "Evaluation dimension list, each containing:\n"
+            "  name: str (identifier), display_name: str (display name),\n"
+            "  description: str (evaluation description), weight: int (weight 0-100),\n"
+            "  evaluation_points: List[str] (optional, specific checkpoints)\n"
+            "When not provided, uses default three dimensions: Goal Completion(40%) + Response Quality(35%) + Communication Experience(25%)"
         ),
     )
     threshold: float = Field(
         default=0.7,
         ge=0.0,
         le=1.0,
-        description="通过阈值（0.0~1.0，默认 0.7）",
+        description="Pass threshold (0.0~1.0, default 0.7)",
     )
 
 
 # ============================================================
-# LLM 结构化输出格式
+# LLM structured output format
 # ============================================================
 
 
 class _DimensionScore(BaseModel):
-    """单维度评分"""
+    """Single dimension score"""
 
-    name: str = Field(description="维度标识名称（英文，与 criteria 中的 name 对应）")
-    score: int = Field(ge=0, le=100, description="该维度得分，0-100 的整数")
-    reason: str = Field(description="评分理由（简短）")
+    name: str = Field(description="Dimension identifier (English, matches name in criteria)")
+    score: int = Field(ge=0, le=100, description="Score for this dimension, integer 0-100")
+    reason: str = Field(description="Scoring reason (brief)")
 
 
 class _EvalLLMResponse(BaseModel):
-    """LLM 评估结构化输出"""
+    """LLM evaluation structured output"""
 
-    dimensions: List[_DimensionScore] = Field(description="各维度评分结果")
-    overall_feedback: str = Field(description="总体评价（2-3句话）")
-    strengths: List[str] = Field(description="优点列表")
-    issues: List[str] = Field(description="问题和改进建议列表")
+    dimensions: List[_DimensionScore] = Field(description="Scores for each dimension")
+    overall_feedback: str = Field(description="Overall assessment (2-3 sentences)")
+    strengths: List[str] = Field(description="List of strengths")
+    issues: List[str] = Field(description="List of issues and improvement suggestions")
 
 
 # ============================================================
@@ -204,7 +204,7 @@ class _EvalLLMResponse(BaseModel):
 
 
 class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=SemanticEvalInfo):
-    """基于 LLM 的通用语义评估器"""
+    """LLM-based general-purpose semantic evaluator"""
 
     _display_meta = {
         "icon": (
@@ -217,31 +217,31 @@ class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=Semanti
             " 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z"
         ),
         "color": "#8b5cf6",
-        "features": ["LLM 驱动", "多维度评分", "语义理解"],
+        "features": ["LLM-Powered", "Multi-Dimensional Scoring", "Semantic Understanding"],
     }
     _cost_meta = {
-        "est_cost_per_case": 0.010,  # 1-2 次 LLM 调用, USD/case
+        "est_cost_per_case": 0.010,  # 1-2 LLM calls, USD/case
     }
 
     def __init__(self, eval_config: SemanticEvalInfo, model: str | None = None, **kwargs):
         super().__init__(eval_config, **kwargs)
         self.model = model or eval_config.model or DEFAULT_MODEL
-        # 成本统计（使用 langchain UsageMetadata）
+        # Cost tracking (using langchain UsageMetadata)
         self._cost = UsageMetadata(input_tokens=0, output_tokens=0, total_tokens=0)
 
     @property
     def cost(self) -> UsageMetadata:
-        """获取累计成本统计"""
+        """Get accumulated cost statistics"""
         return self._cost
 
     def _accumulate_cost(self, usage: dict[str, UsageMetadata] | None) -> None:
-        """累加 LLM 调用成本"""
+        """Accumulate LLM call cost"""
         from evaluator.utils.llm import accumulate_usage
 
         self._cost = accumulate_usage(self._cost, usage)
 
     # ----------------------------------------------------------
-    # 框架接口：从 agent 对象中提取数据，转发给 evaluate
+    # Framework interface: extract data from agent objects, forward to evaluate
     # ----------------------------------------------------------
 
     async def run(
@@ -249,30 +249,30 @@ class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=Semanti
         memory_list: List[TestAgentMemory],
         session_info: SessionInfo | None = None,
     ) -> EvalResult:
-        """框架入口 — 从 memory 中提取数据后调用 evaluate"""
+        """Framework entry — extract data from memory then call evaluate"""
         try:
             logger.info(
-                "[SemanticEval] 从 memory 提取对话: %d 轮 (model=%s)",
+                "[SemanticEval] Extracting conversation from memory: %d turns (model=%s)",
                 len(memory_list),
                 self.model,
             )
             conversation_text = self._memory_to_text(memory_list)
-            logger.debug("[SemanticEval] 对话文本: %d 字符", len(conversation_text))
+            logger.debug("[SemanticEval] Conversation text: %d chars", len(conversation_text))
             return await self.evaluate(
                 conversation_text=conversation_text,
                 user_goal=getattr(self.user_info, "goal", "") if self.user_info else "",
                 user_context=getattr(self.user_info, "context", None) if self.user_info else None,
             )
         except Exception as e:
-            logger.error("[SemanticEval] 评估过程出错: %s", e, exc_info=True)
+            logger.error("[SemanticEval] Evaluation error: %s", e, exc_info=True)
             return EvalResult(
                 result="fail",
                 score=0.0,
-                feedback=f"评估过程出错: {e}",
+                feedback=f"Evaluation error: {e}",
             )
 
     # ----------------------------------------------------------
-    # 核心评估方法：入参全是简单类型，可直接调用做集成测试
+    # Core evaluation method: all params are simple types, can be called directly for integration testing
     # ----------------------------------------------------------
 
     async def evaluate(
@@ -283,19 +283,19 @@ class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=Semanti
         criteria: List[Dict[str, Any]] | None = None,
         threshold: float | None = None,
     ) -> EvalResult:
-        """核心评估逻辑
+        """Core evaluation logic
 
         Args:
-            conversation_text: 格式化后的对话文本（"用户: ...\\n\\nAI助手: ..."）
-            user_goal: 用户目标
-            user_context: 用户背景（可选）
-            criteria: 评估维度列表（可选，默认从 self.eval_config 取）
-            threshold: 通过阈值（可选，默认从 self.eval_config 取）
+            conversation_text: Formatted conversation text ("User: ...\\n\\nAI Assistant: ...")
+            user_goal: User goal
+            user_context: User background (optional)
+            criteria: Evaluation dimension list (optional, defaults from self.eval_config)
+            threshold: Pass threshold (optional, defaults from self.eval_config)
 
         Returns:
             EvalResult
         """
-        # ---- 1. 配置（入参优先 > eval_config）----
+        # ---- 1. Configuration (params take priority over eval_config) ----
         criteria = criteria or [c.model_dump() for c in self.eval_config.criteria]
         threshold = threshold if threshold is not None else self.eval_config.threshold
         criteria = self._normalize_weights(criteria)
@@ -304,52 +304,52 @@ class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=Semanti
             return EvalResult(
                 result="fail",
                 score=0.0,
-                feedback="无对话记录，无法评估",
+                feedback="No conversation records, cannot evaluate",
             )
 
         criteria_summary = " + ".join(f"{c.get('display_name', c['name'])}({c.get('weight', 0)}%)" for c in criteria)
         logger.info(
-            "[SemanticEval] 开始评估 — 维度: %s, 阈值=%.2f",
+            "[SemanticEval] Starting evaluation — dimensions: %s, threshold=%.2f",
             criteria_summary,
             threshold,
         )
 
-        # ---- 2. 构建上下文 ----
+        # ---- 2. Build context ----
         context_parts: list[str] = []
         if user_goal:
-            context_parts.append(f"**用户目标**: {user_goal}")
+            context_parts.append(f"**User Goal**: {user_goal}")
         if user_context:
-            context_parts.append(f"**用户背景**: {user_context}")
-        context_section = "\n".join(context_parts) if context_parts else "无额外上下文信息"
+            context_parts.append(f"**User Background**: {user_context}")
+        context_section = "\n".join(context_parts) if context_parts else "No additional context"
 
-        # ---- 3. 构建 prompt ----
+        # ---- 3. Build prompt ----
         criteria_prompt = self._build_criteria_prompt(criteria)
 
-        system_prompt = """你是一个专业的对话质量评估专家。请根据给定的评估标准，对 AI 助手的表现进行评估。
+        system_prompt = """You are a professional conversation quality evaluation expert. Please evaluate the AI assistant's performance based on the given evaluation criteria.
 
-评估要求：
-1. 严格按照各维度的评估说明和要点进行打分（0-100 分）
-2. 评分要客观公正，有理有据
-3. 给出具体的评分理由和改进建议
-4. 如果某个维度有 evaluation_points，需要逐一检查是否满足"""
+Evaluation requirements:
+1. Score strictly according to each dimension's description and checkpoints (0-100)
+2. Scoring must be objective, fair, and well-reasoned
+3. Provide specific scoring reasons and improvement suggestions
+4. If a dimension has evaluation_points, check each one"""
 
-        input_prompt = f"""## 评估上下文
+        input_prompt = f"""## Evaluation Context
 
 {context_section}
 
-## AI 助手与用户的对话
+## Conversation Between AI Assistant and User
 
 {conversation_text}
 
-## 评估标准
+## Evaluation Criteria
 
-请根据以下维度进行评估，每个维度独立打分（0-100 分）：
+Please evaluate on the following dimensions, scoring each independently (0-100):
 
 {criteria_prompt}
 
-请输出评估结果。"""
+Please output the evaluation result."""
 
-        # ---- 4. 调用 LLM ----
+        # ---- 4. Call LLM ----
         result = await do_execute(
             model=self.model,
             system_prompt=system_prompt,
@@ -358,21 +358,21 @@ class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=Semanti
             max_tokens=2000,
         )
 
-        # 累加成本
+        # Accumulate cost
         self._accumulate_cost(result.usage)
 
-        # ---- 5. 解析结果，计算加权总分 ----
+        # ---- 5. Parse results, calculate weighted total score ----
         if result.data is None:
-            logger.warning("[SemanticEval] LLM 结构化输出解析失败，原始内容: %s", result.content[:500])
+            logger.warning("[SemanticEval] LLM structured output parsing failed, raw content: %s", result.content[:500])
             return EvalResult(
                 result="fail",
                 score=0.0,
-                feedback=f"LLM 结构化输出解析失败: {result.content[:200]}",
+                feedback=f"LLM structured output parsing failed: {result.content[:200]}",
             )
 
         eval_response: _EvalLLMResponse = result.data
 
-        # 建立维度 name → LLM 评分 的映射
+        # Build dimension name -> LLM score mapping
         llm_scores: Dict[str, _DimensionScore] = {d.name: d for d in eval_response.dimensions}
 
         total_score = 0.0
@@ -386,7 +386,7 @@ class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=Semanti
 
             dim = llm_scores.get(name)
             score = dim.score if dim else 50
-            reason = dim.reason if dim else "LLM 未返回该维度评分"
+            reason = dim.reason if dim else "LLM did not return score for this dimension"
 
             dimension_results[name] = {
                 "display_name": display_name,
@@ -399,33 +399,33 @@ class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=Semanti
             total_weight += weight
 
             logger.info(
-                "[SemanticEval]   %s: %d 分 (权重 %d%%), 理由: %s",
+                "[SemanticEval]   %s: %d pts (weight %d%%), reason: %s",
                 display_name,
                 score,
                 weight,
                 reason,
             )
 
-        # 最终得分（0-1 范围）
+        # Final score (0-1 range)
         final_score = (total_score / total_weight / 100) if total_weight > 0 else 0.0
         passed = final_score >= threshold
 
-        # ---- 6. 构建反馈 ----
+        # ---- 6. Build feedback ----
         feedback_parts: list[str] = []
         if eval_response.overall_feedback:
             feedback_parts.append(eval_response.overall_feedback)
         if eval_response.strengths:
-            feedback_parts.append(f"优点: {'; '.join(eval_response.strengths)}")
+            feedback_parts.append(f"Strengths: {'; '.join(eval_response.strengths)}")
         if eval_response.issues:
-            feedback_parts.append(f"问题: {'; '.join(eval_response.issues)}")
+            feedback_parts.append(f"Issues: {'; '.join(eval_response.issues)}")
         feedback = " | ".join(feedback_parts)
 
         if eval_response.strengths:
-            logger.info("[SemanticEval] 优点: %s", "; ".join(eval_response.strengths))
+            logger.info("[SemanticEval] Strengths: %s", "; ".join(eval_response.strengths))
         if eval_response.issues:
-            logger.info("[SemanticEval] 问题: %s", "; ".join(eval_response.issues))
+            logger.info("[SemanticEval] Issues: %s", "; ".join(eval_response.issues))
         logger.info(
-            "[SemanticEval] 评估完成 — 加权总分=%.2f, 阈值=%.2f, 结果=%s",
+            "[SemanticEval] Evaluation complete — weighted total=%.2f, threshold=%.2f, result=%s",
             final_score,
             threshold,
             "pass" if passed else "fail",
@@ -439,12 +439,12 @@ class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=Semanti
         )
 
     # ============================================================
-    # 辅助方法
+    # Helper methods
     # ============================================================
 
     @staticmethod
     def _normalize_weights(criteria: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """归一化权重到总和 100"""
+        """Normalize weights to sum to 100"""
         total = sum(c.get("weight", 0) for c in criteria)
         if total == 100 or total == 0:
             if total == 0:
@@ -453,38 +453,38 @@ class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=Semanti
                     c["weight"] = avg
             return criteria
 
-        logger.warning("[SemanticEval] 权重总和为 %d，自动归一化到 100", total)
+        logger.warning("[SemanticEval] Weight sum is %d, auto-normalizing to 100", total)
         for c in criteria:
             c["weight"] = round(c.get("weight", 0) * 100 / total)
         return criteria
 
     @staticmethod
     def _memory_to_text(memory_list: List[TestAgentMemory]) -> str:
-        """从 TestAgent 的 memory_list 提取并格式化对话文本"""
+        """Extract and format conversation text from TestAgent's memory_list"""
         lines: list[str] = []
 
         for mem in memory_list:
-            # 跳过 is_finished 幽灵轮次（未发送给 target）
+            # Skip is_finished ghost turns (not sent to target)
             if mem.test_reaction.is_finished and mem.target_response is None:
                 continue
 
-            # 用户（TestAgent）说了什么
+            # What the user (TestAgent) said
             user_text = mem.test_reaction.action.semantic_content
             if user_text:
-                lines.append(f"用户: {user_text}")
+                lines.append(f"User: {user_text}")
 
-            # 被测系统回了什么
+            # What the system under test responded
             target_text = mem.target_response.extract_text() if mem.target_response else ""
             if target_text:
                 if len(target_text) > 2000:
-                    target_text = target_text[:2000] + "...(已截断)"
-                lines.append(f"AI助手: {target_text}")
+                    target_text = target_text[:2000] + "...(truncated)"
+                lines.append(f"AI Assistant: {target_text}")
 
         return "\n\n".join(lines)
 
     @staticmethod
     def _build_criteria_prompt(criteria: List[Dict[str, Any]]) -> str:
-        """构建评估维度的 prompt"""
+        """Build evaluation dimension prompt"""
         lines: list[str] = []
 
         for i, criterion in enumerate(criteria, 1):
@@ -494,11 +494,11 @@ class SemanticEvalAgent(AbstractEvalAgent, name="semantic", params_model=Semanti
             weight = criterion.get("weight", 100 // len(criteria))
             evaluation_points = criterion.get("evaluation_points", [])
 
-            lines.append(f"### {i}. {display_name} ({name}) — 权重 {weight}%")
+            lines.append(f"### {i}. {display_name} ({name}) — Weight {weight}%")
             if description:
-                lines.append(f"评估说明: {description}")
+                lines.append(f"Evaluation description: {description}")
             if evaluation_points:
-                lines.append("需要检查的要点:")
+                lines.append("Checkpoints:")
                 for point in evaluation_points:
                     lines.append(f"  - {point}")
             lines.append("")

@@ -1,4 +1,4 @@
-"""Web API 测试公共 fixtures"""
+"""Shared fixtures for Web API tests"""
 
 import pytest
 import pytest_asyncio

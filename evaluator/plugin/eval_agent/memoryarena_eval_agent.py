@@ -1,19 +1,19 @@
 """
-MemoryArenaEvalAgent — 基于 LLM-as-Judge 的多子任务评估器
+MemoryArenaEvalAgent — LLM-as-Judge multi-subtask evaluator
 
-注册名称: "memoryarena"
+Registered name: "memoryarena"
 
-工作原理:
-1. 从 TestAgent / TargetAgent 的 memory_list 中提取多轮对话
-2. 按轮次将每个 assistant 回复与对应的 ground_truth 配对
-3. 并发调用 LLM 逐子任务判断回答是否正确
-4. 计算 Progress Score = 通过子任务数 / 总子任务数
-5. 结果为 scored，score = Progress Score
+How it works:
+1. Extract multi-turn conversation from TestAgent / TargetAgent memory_list
+2. Pair each assistant response with the corresponding ground_truth by turn
+3. Concurrently call LLM to judge each subtask answer
+4. Calculate Progress Score = passed subtasks / total subtasks
+5. Result is scored, score = Progress Score
 
-支持领域: bundled_shopping, progressive_search, group_travel_planner,
-formal_reasoning_math, formal_reasoning_phys。
+Supported domains: bundled_shopping, progressive_search, group_travel_planner,
+formal_reasoning_math, formal_reasoning_phys.
 
-参考: https://arxiv.org/abs/2602.16313
+Reference: https://arxiv.org/abs/2602.16313
 """
 
 import asyncio
@@ -80,15 +80,15 @@ Return ONLY the JSON object in markdown format. Do not include any other text.""
 
 
 # ============================================================
-# MemoryArenaEvalInfo — 配置模型
+# MemoryArenaEvalInfo — config model
 # ============================================================
 
 
 class MemoryArenaEvalInfo(BaseModel):
-    """MemoryArena 多子任务评估配置 — LLM-as-Judge + Progress Score
+    """MemoryArena multi-subtask evaluation config — LLM-as-Judge + Progress Score
 
-    按轮次将 assistant 回复与 ground_truth 配对，并发调用 LLM 逐子任务判断正确性，
-    计算 Progress Score = 通过子任务数 / 总子任务数，结果为 scored。
+    Pairs assistant responses with ground_truths by turn, concurrently calls LLM to judge each subtask.
+    Calculates Progress Score = passed subtasks / total subtasks, result is scored.
     """
 
     model_config = ConfigDict(
@@ -110,19 +110,19 @@ class MemoryArenaEvalInfo(BaseModel):
         },
     )
 
-    evaluator: Literal["memoryarena"] = Field(default="memoryarena", description="评估器类型")
-    model: Optional[str] = Field(default="gpt-4.1", description="Judge LLM 模型（默认 gpt-4.1）")
+    evaluator: Literal["memoryarena"] = Field(default="memoryarena", description="Evaluator type")
+    model: Optional[str] = Field(default="gpt-4.1", description="Judge LLM model (default gpt-4.1)")
     domain: str = Field(
         description=(
-            "评测领域 — bundled_shopping, progressive_search, group_travel_planner, "
+            "Evaluation domain — bundled_shopping, progressive_search, group_travel_planner, "
             "formal_reasoning_math, formal_reasoning_phys"
         ),
     )
-    ground_truths: List[str] = Field(description="各子任务的标准答案列表，按轮次与对话对齐")
+    ground_truths: List[str] = Field(description="Standard answers for each subtask, aligned with conversation turns")
 
 
 class MemoryArenaEvalAgent(AbstractEvalAgent, name="memoryarena", params_model=MemoryArenaEvalInfo):
-    """MemoryArena 多子任务评估器 — LLM-as-Judge + Progress Score"""
+    """MemoryArena multi-subtask evaluator — LLM-as-Judge + Progress Score"""
 
     _display_meta = {
         "icon": (
@@ -131,7 +131,7 @@ class MemoryArenaEvalAgent(AbstractEvalAgent, name="memoryarena", params_model=M
             " 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"
         ),
         "color": "#8b5cf6",
-        "features": ["MemoryArena", "多子任务", "Progress Score"],
+        "features": ["MemoryArena", "Multi-Subtask", "Progress Score"],
     }
     _cost_meta = {
         "est_cost_per_case": 0.06,  # ~6 subtasks × gpt-4.1 judging, USD/case
@@ -153,7 +153,7 @@ class MemoryArenaEvalAgent(AbstractEvalAgent, name="memoryarena", params_model=M
         self._cost = accumulate_usage(self._cost, usage)
 
     # ----------------------------------------------------------
-    # 框架接口
+    # Framework interface
     # ----------------------------------------------------------
 
     async def run(
@@ -162,35 +162,35 @@ class MemoryArenaEvalAgent(AbstractEvalAgent, name="memoryarena", params_model=M
         session_info: SessionInfo | None = None,
     ) -> EvalResult:
         try:
-            # 提取多轮对话中的 (question, response) 对
+            # Extract (question, response) pairs from multi-turn conversation
             qa_pairs = self._extract_qa_pairs(memory_list, self.history)
             if not qa_pairs:
-                return EvalResult(result="fail", score=0.0, feedback="无对话记录，无法评估")
+                return EvalResult(result="fail", score=0.0, feedback="No conversation records, cannot evaluate")
 
             ground_truths = self.eval_config.ground_truths
             domain = self.eval_config.domain
             num_subtasks = len(ground_truths)
 
             if not ground_truths:
-                return EvalResult(result="fail", score=0.0, feedback="未配置 ground_truths，无法评估")
+                return EvalResult(result="fail", score=0.0, feedback="No ground_truths configured, cannot evaluate")
 
             logger.info(
-                "[MemoryArenaEval] 开始评估 — %d 个子任务, domain=%s, model=%s",
+                "[MemoryArenaEval] Starting evaluation — %d subtasks, domain=%s, model=%s",
                 num_subtasks,
                 domain,
                 self.model,
             )
 
-            # 对齐子任务数量（取 min 避免越界）
+            # Align subtask count (take min to avoid out-of-bounds)
             n = min(len(qa_pairs), num_subtasks)
             if len(qa_pairs) < num_subtasks:
                 logger.warning(
-                    "[MemoryArenaEval] 对话轮次 (%d) 少于子任务数 (%d)，缺失部分计为未通过",
+                    "[MemoryArenaEval] Conversation turns (%d) fewer than subtasks (%d), missing parts count as failed",
                     len(qa_pairs),
                     num_subtasks,
                 )
 
-            # 并发评估所有已有的子任务
+            # Concurrently evaluate all available subtasks
             judge_results = await asyncio.gather(
                 *[
                     self._judge_subtask(qa_pairs[i]["question"], qa_pairs[i]["response"], ground_truths[i], domain)
@@ -198,16 +198,16 @@ class MemoryArenaEvalAgent(AbstractEvalAgent, name="memoryarena", params_model=M
                 ]
             )
 
-            # 缺失的子任务默认不通过
+            # Missing subtasks default to not passed
             for _ in range(num_subtasks - n):
                 judge_results.append({"correct": False, "explanation": "No response (conversation ended early)"})
 
-            # 计算 Progress Score
+            # Calculate Progress Score
             correct_count = sum(1 for r in judge_results if r.get("correct"))
             progress_score = correct_count / num_subtasks if num_subtasks > 0 else 0.0
             success = correct_count == num_subtasks
 
-            # 构建详情
+            # Build details
             subtask_details = []
             for i, result in enumerate(judge_results):
                 subtask_details.append(
@@ -221,12 +221,12 @@ class MemoryArenaEvalAgent(AbstractEvalAgent, name="memoryarena", params_model=M
                 )
 
             feedback = (
-                f"MemoryArena [{domain}] 评估: {correct_count}/{num_subtasks} 子任务通过, "
+                f"MemoryArena [{domain}] evaluation: {correct_count}/{num_subtasks} subtasks passed, "
                 f"PS={progress_score:.3f}, SR={'1.0' if success else '0.0'}"
             )
 
             logger.info(
-                "[MemoryArenaEval] 评估完成 — PS=%.3f, SR=%s (%d/%d)",
+                "[MemoryArenaEval] Evaluation complete — PS=%.3f, SR=%s (%d/%d)",
                 progress_score,
                 "1.0" if success else "0.0",
                 correct_count,
@@ -250,15 +250,15 @@ class MemoryArenaEvalAgent(AbstractEvalAgent, name="memoryarena", params_model=M
             )
 
         except Exception as e:
-            logger.error("[MemoryArenaEval] 评估过程出错: %s", e, exc_info=True)
-            return EvalResult(result="fail", score=0.0, feedback=f"评估过程出错: {e}")
+            logger.error("[MemoryArenaEval] Evaluation error: %s", e, exc_info=True)
+            return EvalResult(result="fail", score=0.0, feedback=f"Evaluation error: {e}")
 
     # ----------------------------------------------------------
-    # 核心方法
+    # Core methods
     # ----------------------------------------------------------
 
     async def _judge_subtask(self, question: str, response: str, ground_truth: str, domain: str) -> dict:
-        """调用 LLM 判断单个子任务回答是否正确"""
+        """Call LLM to judge whether a single subtask answer is correct"""
         prompt = (
             JUDGE_TEMPLATE.replace("<<question>>", question)
             .replace("<<expected_answer>>", ground_truth)
@@ -283,24 +283,24 @@ class MemoryArenaEvalAgent(AbstractEvalAgent, name="memoryarena", params_model=M
                         return parsed
 
                 logger.warning(
-                    "[MemoryArenaEval] judge 输出格式异常 (attempt %d/%d): %s",
+                    "[MemoryArenaEval] Judge output format error (attempt %d/%d): %s",
                     attempt + 1,
                     max_retries,
                     result.content[:200],
                 )
             except Exception as e:
                 logger.warning(
-                    "[MemoryArenaEval] judge 调用失败 (attempt %d/%d): %s",
+                    "[MemoryArenaEval] Judge call failed (attempt %d/%d): %s",
                     attempt + 1,
                     max_retries,
                     e,
                 )
 
-        logger.error("[MemoryArenaEval] judge 重试耗尽，默认 correct=False")
+        logger.error("[MemoryArenaEval] Judge retries exhausted, defaulting to correct=False")
         return {"explanation": "Judging failed after retries", "correct": False}
 
     # ----------------------------------------------------------
-    # 对话提取
+    # Conversation extraction
     # ----------------------------------------------------------
 
     @staticmethod
@@ -308,10 +308,10 @@ class MemoryArenaEvalAgent(AbstractEvalAgent, name="memoryarena", params_model=M
         memory_list: List[TestAgentMemory],
         history: List[BaseMessage] | None = None,
     ) -> List[Dict[str, str]]:
-        """从 memory_list 中提取 (question, response) 对
+        """Extract (question, response) pairs from memory_list
 
-        每轮对话中 user 发送的内容为 question，assistant 回复为 response。
-        history 中的消息不计入子任务评估（它们是预加载上下文）。
+        In each conversation turn, user content is question, assistant reply is response.
+        Messages in history are not counted in subtask evaluation (they are preloaded context).
         """
         pairs: List[Dict[str, str]] = []
 
@@ -329,7 +329,7 @@ class MemoryArenaEvalAgent(AbstractEvalAgent, name="memoryarena", params_model=M
 
     @staticmethod
     def _parse_json_response(text: str) -> Optional[dict]:
-        """从 LLM 响应中提取 JSON（兼容 markdown 包裹）"""
+        """Extract JSON from LLM response (compatible with markdown wrapping)"""
         cleaned = re.sub(r"^```json\s*|\s*```$", "", text.strip())
         try:
             return json.loads(cleaned)

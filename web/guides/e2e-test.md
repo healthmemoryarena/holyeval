@@ -1,72 +1,72 @@
-# 端到端测试
+# End-to-End Testing
 
-> **在 Claude Code 中使用**: 输入 `/run-e2e-test`，后跟你的测试需求（如指定用例、测试范围），Claude 会自动运行端到端测试并分析结果。
+> **Using in Claude Code**: Type `/run-e2e-test`, followed by your testing requirements (e.g., specific cases, test scope). Claude will automatically run the end-to-end tests and analyze the results.
 
-## 概述
+## Overview
 
-端到端测试覆盖完整的评测流程：加载用例 → 初始化 Agent → 虚拟用户与被测系统多轮对话 → 评估器打分 → 输出结果。测试通过即代表框架各组件（TestAgent、TargetAgent、EvalAgent、Orchestrator）协作正常。
+End-to-end tests cover the complete evaluation flow: load test cases -> initialize Agents -> multi-turn conversation between virtual user and system under test -> evaluator scoring -> output results. A passing test confirms that all framework components (TestAgent, TargetAgent, EvalAgent, Orchestrator) are working together correctly.
 
-## 运行 e2e 测试
+## Running E2E Tests
 
-### 前置条件
+### Prerequisites
 
-确保 `.env` 中已配置 `OPENAI_API_KEY`，e2e 测试需要调用 LLM。
+Ensure `OPENAI_API_KEY` is configured in `.env`, as e2e tests require LLM calls.
 
-### 运行全部
+### Run All
 
 ```bash
 pytest evaluator/tests/test_e2e.py -v -s
 ```
 
-### 运行单条用例
+### Run a Single Case
 
-用 `-k` 过滤用例 ID：
+Use `-k` to filter by case ID:
 
 ```bash
 pytest evaluator/tests/test_e2e.py -v -s -k "manual_headache_001"
 pytest evaluator/tests/test_e2e.py -v -s -k "auto_history_llm_004"
 ```
 
-### 运行批量测试（含进度跟踪）
+### Run Batch Tests (with Progress Tracking)
 
 ```bash
 pytest evaluator/tests/test_e2e.py -v -s -k "batch"
 ```
 
-## 测试用例
+## Test Cases
 
-e2e 测试用例在 `evaluator/tests/fixtures/test_cases.jsonl`，包含 4 条用例：
+E2E test cases are in `evaluator/tests/fixtures/test_cases.jsonl`, containing 4 cases:
 
-| ID | 用户模式 | 被测系统 | 评估器 |
+| ID | User Mode | Target System | Evaluator |
 |----|----------|----------|--------|
 | `manual_headache_001` | manual | theta_api | semantic |
 | `auto_cough_child_002` | auto | theta_api | semantic |
 | `auto_history_sleep_003` | auto | theta_api | semantic |
 | `auto_history_llm_004` | auto | llm_api | semantic |
 
-覆盖了：
-- **manual / auto** 两种 TestAgent 模式
-- **theta_api / llm_api** 两种 TargetAgent
-- 带 history 的预设对话场景
+Coverage includes:
+- **manual / auto** — both TestAgent modes
+- **theta_api / llm_api** — both TargetAgent types
+- Preset conversation scenarios with history
 
-## 测试验证内容
+## What Tests Verify
 
-每条用例通过后验证：
+Each case validates upon passing:
 
-1. 评估结果为 `pass` 或 `fail`，分数在 `0.0~1.0` 范围内
-2. 有非空的 feedback 评语
-3. 执行时间有效（`start <= end`）
-4. 带 history 的用例：trace 中保留了历史对话
-5. llm_api 目标：有 target 成本记录
+1. Evaluation result is `pass` or `fail`, with a score in the `0.0~1.0` range
+2. Non-empty feedback commentary
+3. Valid execution timing (`start <= end`)
+4. Cases with history: historical conversation is preserved in the trace
+5. llm_api target: target cost records are present
 
-批量测试额外验证：
-- `TestReport` 聚合指标（pass_count, fail_count, pass_rate, avg_score）
-- `BatchSession` 进度跟踪和快照（snapshot）功能
+Batch tests additionally verify:
+- `TestReport` aggregate metrics (pass_count, fail_count, pass_rate, avg_score)
+- `BatchSession` progress tracking and snapshot functionality
 
-## 运行全部单元测试
+## Running All Unit Tests
 
 ```bash
 pytest evaluator/tests/ -v
 ```
 
-> 注意：e2e 测试需要 API Key，未配置时会自动跳过（`skipif OPENAI_API_KEY`）。单元测试中的 mock 测试无需 API Key。
+> Note: E2E tests require an API key. Without one configured, they are automatically skipped (`skipif OPENAI_API_KEY`). Mock-based unit tests do not require an API key.

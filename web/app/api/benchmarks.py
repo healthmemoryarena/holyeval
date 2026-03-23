@@ -1,4 +1,4 @@
-"""Benchmark 数据 API"""
+"""Benchmark data API"""
 
 from typing import Any
 
@@ -14,7 +14,7 @@ router = APIRouter(tags=["benchmarks"])
 @router.get("/benchmarks", response_model=list[BenchmarkSummary])
 async def get_benchmarks():
     benchmarks = list_benchmarks()
-    # 注入准备状态
+    # Inject prepare status
     for b in benchmarks:
         entry = prepare_manager.get_status(b.name)
         if entry:
@@ -25,7 +25,7 @@ async def get_benchmarks():
 
 @router.get("/prepare-status")
 async def get_prepare_status():
-    """获取所有 benchmark 的准备脚本状态"""
+    """Get prepare script status for all benchmarks"""
     result = {}
     for name, entry in prepare_manager.get_all_statuses().items():
         result[name] = {
