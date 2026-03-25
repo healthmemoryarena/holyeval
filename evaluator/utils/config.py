@@ -18,7 +18,7 @@ try:
     from evaluator.utils.remote_config import load_remote_config
 
     load_remote_config()
-except ImportError:
+except Exception:
     pass
 
 

@@ -1,0 +1,55 @@
+{
+  "benchmark": "eslbench",
+  "generated_at": "20260324_194411",
+  "total_runs": 5,
+  "success_count": 5,
+  "matrix": [
+    {
+      "dataset": "ablation_del10pct_part1_sample",
+      "target_type": "llm_api",
+      "override": "model=gemini-3-flash-preview",
+      "status": "success",
+      "avg_score": 0.5156421356421357,
+      "report_path": "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del10pct_part1_sample_llm_api_gemini-3-flash-preview_20260324_131140.json"
+    },
+    {
+      "dataset": "ablation_del20pct_part1_sample",
+      "target_type": "llm_api",
+      "override": "model=gemini-3-flash-preview",
+      "status": "success",
+      "avg_score": 0.538910447761194,
+      "report_path": "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del20pct_part1_sample_llm_api_gemini-3-flash-preview_20260324_145106.json"
+    },
+    {
+      "dataset": "ablation_del30pct_part1_sample",
+      "target_type": "llm_api",
+      "override": "model=gemini-3-flash-preview",
+      "status": "success",
+      "avg_score": 0.5632508372618169,
+      "report_path": "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del30pct_part1_sample_llm_api_gemini-3-flash-preview_20260324_163549.json"
+    },
+    {
+      "dataset": "ablation_noise10pct_part1_sample",
+      "target_type": "llm_api",
+      "override": "model=gemini-3-flash-preview",
+      "status": "success",
+      "avg_score": 0.541927382817462,
+      "report_path": "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_noise10pct_part1_sample_llm_api_gemini-3-flash-preview_20260324_181114.json"
+    },
+    {
+      "dataset": "ablation_noise20pct_part1_sample",
+      "target_type": "llm_api",
+      "override": "model=gemini-3-flash-preview",
+      "status": "success",
+      "avg_score": 0.564,
+      "report_path": "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_noise20pct_part1_sample_llm_api_gemini-3-flash-preview_20260324_194402.json"
+    }
+  ],
+  "report_paths": [
+    "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del10pct_part1_sample_llm_api_gemini-3-flash-preview_20260324_131140.json",
+    "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del20pct_part1_sample_llm_api_gemini-3-flash-preview_20260324_145106.json",
+    "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del30pct_part1_sample_llm_api_gemini-3-flash-preview_20260324_163549.json",
+    "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_noise10pct_part1_sample_llm_api_gemini-3-flash-preview_20260324_181114.json",
+    "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_noise20pct_part1_sample_llm_api_gemini-3-flash-preview_20260324_194402.json"
+  ]
+}

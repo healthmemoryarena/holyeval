@@ -248,7 +248,11 @@ class TaskManager:
         path = resolve_data_path(benchmark, dataset)
         metadata = _read_metadata(path.parent)
         params = metadata.get("params") or None
-        items = load_bench_items(path, params=params)
+        try:
+            items = load_bench_items(path, params=params)
+        except ValueError:
+            logger.exception("数据集加载失败: %s/%s", benchmark, dataset)
+            raise ValueError("数据集加载异常，请联系管理员") from None
 
         if not items:
             raise ValueError(f"Dataset is empty ({benchmark}/{dataset})")
@@ -299,7 +303,11 @@ class TaskManager:
         path = resolve_data_path(benchmark, dataset)
         metadata = _read_metadata(path.parent)
         params = metadata.get("params") or None
-        items = load_bench_items(path, params=params)
+        try:
+            items = load_bench_items(path, params=params)
+        except ValueError:
+            logger.exception("数据集加载失败: %s/%s", benchmark, dataset)
+            raise ValueError("数据集加载异常，请联系管理员") from None
         dataset_ids = {item.id for item in items}
         submitted_ids = {r.id for r in results}
         matched_ids = dataset_ids & submitted_ids

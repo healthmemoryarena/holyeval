@@ -1,0 +1,55 @@
+{
+  "benchmark": "eslbench",
+  "generated_at": "20260325_034049",
+  "total_runs": 5,
+  "success_count": 5,
+  "matrix": [
+    {
+      "dataset": "ablation_del10pct_part1_sample",
+      "target_type": "hippo_rag_api",
+      "override": "model=gpt-5.4",
+      "status": "success",
+      "avg_score": 0.3629980788257211,
+      "report_path": "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del10pct_part1_sample_hippo_rag_api_gpt-5.4_k50_20260324_204536.json"
+    },
+    {
+      "dataset": "ablation_del20pct_part1_sample",
+      "target_type": "hippo_rag_api",
+      "override": "model=gpt-5.4",
+      "status": "success",
+      "avg_score": 0.3618922544456379,
+      "report_path": "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del20pct_part1_sample_hippo_rag_api_gpt-5.4_k50_20260324_223657.json"
+    },
+    {
+      "dataset": "ablation_del30pct_part1_sample",
+      "target_type": "hippo_rag_api",
+      "override": "model=gpt-5.4",
+      "status": "success",
+      "avg_score": 0.4329575829584817,
+      "report_path": "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del30pct_part1_sample_hippo_rag_api_gpt-5.4_k50_20260325_001404.json"
+    },
+    {
+      "dataset": "ablation_noise10pct_part1_sample",
+      "target_type": "hippo_rag_api",
+      "override": "model=gpt-5.4",
+      "status": "success",
+      "avg_score": 0.42575307219662056,
+      "report_path": "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_noise10pct_part1_sample_hippo_rag_api_gpt-5.4_k50_20260325_020910.json"
+    },
+    {
+      "dataset": "ablation_noise20pct_part1_sample",
+      "target_type": "hippo_rag_api",
+      "override": "model=gpt-5.4",
+      "status": "success",
+      "avg_score": 0.3806943944943945,
+      "report_path": "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_noise20pct_part1_sample_hippo_rag_api_gpt-5.4_k50_20260325_034041.json"
+    }
+  ],
+  "report_paths": [
+    "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del10pct_part1_sample_hippo_rag_api_gpt-5.4_k50_20260324_204536.json",
+    "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del20pct_part1_sample_hippo_rag_api_gpt-5.4_k50_20260324_223657.json",
+    "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_del30pct_part1_sample_hippo_rag_api_gpt-5.4_k50_20260325_001404.json",
+    "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_noise10pct_part1_sample_hippo_rag_api_gpt-5.4_k50_20260325_020910.json",
+    "/Users/admin/projects/holyeval/benchmark/report/eslbench/ablation_noise20pct_part1_sample_hippo_rag_api_gpt-5.4_k50_20260325_034041.json"
+  ]
+}
