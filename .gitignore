@@ -51,6 +51,8 @@ data_local
 !.pikiclaw/skills/
 !.pikiclaw/skills/**
 
+!benchmark/data/*/tools/
+
 # === OPENSOURCE-EXCLUDE START ===
 # Auto-generated from .opensource-exclude — do not edit manually
 hma-web/
@@ -63,10 +65,13 @@ evaluator/plugin/target_agent/theta_smart_api_target_agent.py
 evaluator/plugin/target_agent/theta_miroflow_target_agent.py
 evaluator/plugin/eval_agent/indicator_eval_agent.py
 evaluator/plugin/eval_agent/indicator_recall_eval_agent.py
-evaluator/plugin/eval_agent/kg_qa_eval_agent.py
+evaluator/plugin/eval_agent/preset_answer_eval_agent.py
+evaluator/plugin/eval_agent/keyword_eval_agent.py
+evaluator/plugin/eval_agent/redteam_compliance_eval_agent.py
 evaluator/utils/theta_config.py
 evaluator/utils/remote_config.py
 benchmark/data/eslbench/ablation_*
+benchmark/data/agentclinic/
 benchmark/data/thetagen/
 benchmark/data/thetagen_sampling/
 benchmark/data/extraction/
@@ -79,6 +84,7 @@ benchmark/llm_reeval_fails.py
 benchmark/kg_qa_ranking_table.py
 benchmark/rerun_miroflow_3941_3948.sh
 benchmark/report/
+generator/agentclinic/
 generator/theta_benchmark/
 generator/thetagen/
 generator/thetagendata/
@@ -101,3 +107,5 @@ __pycache__/
 *.pyc
 .DS_Store
 # === OPENSOURCE-EXCLUDE END ===
+\!benchmark/data/*/tools/
+\!benchmark/data/*/tools/**

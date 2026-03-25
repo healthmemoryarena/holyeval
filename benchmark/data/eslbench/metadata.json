@@ -1,6 +1,6 @@
 {
   "description": "# ThetaGen KG 知识问答评测\n\n基于 thetagendata 知识图谱生成的确定性评测集，20 个虚拟用户 × 100 题，覆盖 5 个难度等级:\n- **direct**: 直接数据检索（profile/device/exam/event 属性）\n- **single_hop**: 单跳推理（沿一条边遍历/聚合）\n- **multi_hop**: 多跳推理（跨多边集合运算）\n- **multi_hop_temporal**: 多跳 + 时间窗口统计\n- **attribution**: 事件归因分析\n\n| 数据集 | 说明 | 条数 |\n|--------|------|------|\n| `full` | 全量汇总（20 用户） | ~2000 |\n| `user_{id}` | 单用户评测集 | ~100 |\n| `sample` | 旧版抽样（兼容） | 100 |\n\n### Target 类型\n- **theta_api**: Theta Health API（默认 expert agent）\n- **llm_api**: 基模 + retrieve 工具组（文件检索 + DuckDB 查询）\n\n评估器: `kg_qa`（混合规则/LLM，按 answer_type 路由）",
-  "prepare": "generator.thetagen.prepare_data",
+  "prepare": "generator.eslbench.prepare_data",
   "target": [
     {
       "type": "theta_api",
@@ -53,7 +53,7 @@
           "required": false
         },
         "tool_group": {
-          "default": "thetagen/retrieve",
+          "default": "eslbench/retrieve",
           "editable": false
         },
         "tool_context": {
