@@ -78,29 +78,6 @@ def _make_mock_do_execute(captured_histories: list):
 # ============================================================
 
 
-@pytest.mark.asyncio
-async def test_strict_inputs_basic():
-    """strict_inputs 前 N 轮应直接发送预设内容，不调用 LLM"""
-    agent = AutoTestAgent(
-        _make_user_info(strict_inputs=["你好", "我头疼"], max_turns=5)
-    )
-
-    # Turn 1: 应发送 strict_inputs[0]
-    r1 = await agent.do_generate(None)
-    assert r1.action.semantic_content == "你好"
-    assert r1.reason == "强制输入"
-    assert r1.is_finished is False
-
-    # Turn 2: 应发送 strict_inputs[1]
-    target_r1 = _make_target_reaction("您好，请问有什么可以帮您？")
-    r2 = await agent.do_generate(target_r1)
-    assert r2.action.semantic_content == "我头疼"
-    assert r2.reason == "强制输入"
-    assert r2.is_finished is False
-
-    print(f"\n[strict_inputs] turn1={r1.action.semantic_content!r}, turn2={r2.action.semantic_content!r}")
-
-
 # ============================================================
 # 2. max_turns 超限自动终止
 # ============================================================

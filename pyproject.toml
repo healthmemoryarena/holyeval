@@ -9,21 +9,7 @@ dependencies = [
     "holyeval-benchmark",
     "holyeval-generator",
     "holyeval-web",
-    "networkx>=3.6.1",
-    "nano-vectordb>=0.0.4.3",
-    "numpy>=2.4.3",
-    "tiktoken>=0.12.0",
-    "aioboto3>=15.5.0",
-    "python-dateutil>=2.9.0.post0",
-    "graspologic>=3.3.0",
-    "hnswlib>=0.8.0",
-    "neo4j>=6.1.0",
-    "pandas>=3.0.1",
 ]
-
-# GPU 依赖（torch/sentence-transformers）已移除，
-# dyg_graphrag vendor 代码中均有 try/except ImportError 保护。
-# 如需本地推理: uv pip install torch sentence-transformers
 
 [tool.uv]
 package = false

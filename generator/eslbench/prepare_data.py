@@ -1,11 +1,13 @@
 """
-ESLBench 数据准备脚本
+ESLBench 数据准备脚本（canonical implementation）
+
+ThetaGen 和 ESLBench 共享此模块的核心函数。核心函数均接受 benchmark_dir / data_dir / label 参数，
+两个 benchmark 通过传入各自的路径复用同一套逻辑。
 
 Web UI 启动时通过 PrepareManager 自动执行，完成以下步骤:
-1. 从 HuggingFace ($THETAGEN_HF_REPO, 默认 cailiang/thetagen) 下载用户数据（基于 manifest.json 增量更新）
-2. 为每个用户创建独立 DuckDB（benchmark/data/eslbench/.data/{user_dir}/user.duckdb）
-
-与 thetagen/prepare_data 的区别: 不生成 JSONL 评测集（eslbench 已有自己的 JSONL 数据文件）。
+1. 从 HuggingFace ($ESLBENCH_HF_REPO, 默认 healthmemoryarena/ESL-Bench) 下载用户数据（基于 manifest.json 增量更新）
+2. 为每个用户创建独立 DuckDB（benchmark/data/{benchmark}/.data/{user_dir}/user.duckdb）
+3. [可选] 生成每用户 JSONL + 汇总 full.jsonl（ThetaGen 使用，ESLBench 已有预制 JSONL）
 
 目录名即邮箱（_AT_ 替换 @），如 user110_AT_demo → user110@demo。
 自动发现用户目录，无需硬编码用户列表。
@@ -23,48 +25,61 @@ import json
 import os
 from pathlib import Path
 
-HF_REPO = os.getenv("THETAGEN_HF_REPO", "cailiang/thetagen")
+HF_REPO = os.getenv("ESLBENCH_HF_REPO", os.getenv("THETAGEN_HF_REPO", "healthmemoryarena/ESL-Bench"))
+
+# ==================== ESLBench 默认路径 ====================
 
 BENCHMARK_DIR = Path(__file__).resolve().parents[2] / "benchmark" / "data" / "eslbench"
 DATA_DIR = BENCHMARK_DIR / ".data"
-LOCAL_MANIFEST_FILE = DATA_DIR / ".manifest.json"
+
+# ==================== 共享工具函数 ====================
 
 
-def _dir_to_email(dir_name: str) -> str:
+def dir_to_email(dir_name: str) -> str:
     """目录名 → 邮箱: user110_AT_demo → user110@demo"""
     return dir_name.replace("_AT_", "@")
 
 
-def _discover_user_dirs() -> list[Path]:
+def discover_user_dirs(data_dir: Path) -> list[Path]:
     """自动发现 .data/ 下的用户目录（排除隐藏目录）"""
-    if not DATA_DIR.is_dir():
+    if not data_dir.is_dir():
         return []
-    return sorted(d for d in DATA_DIR.iterdir() if d.is_dir() and not d.name.startswith("."))
+    return sorted(d for d in data_dir.iterdir() if d.is_dir() and not d.name.startswith("."))
 
 
-def _find_timeline(user_dir: Path) -> Path | None:
+def find_timeline(user_dir: Path) -> Path | None:
     """在用户目录中查找 timeline.json（兼容不同命名约定）"""
     candidates = list(user_dir.glob("*_timeline.json"))
     return candidates[0] if candidates else None
 
 
+def write_jsonl(items: list[dict], path: Path) -> None:
+    """写入 JSONL 文件"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        for item in items:
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+
 # ==================== Step 1: HuggingFace 下载（manifest 驱动） ====================
 
 
-def _load_local_manifest() -> dict:
+def _load_local_manifest(data_dir: Path) -> dict:
     """读取本地 manifest（不存在则返回空 dict）"""
-    if LOCAL_MANIFEST_FILE.exists():
-        return json.loads(LOCAL_MANIFEST_FILE.read_text(encoding="utf-8"))
+    manifest_file = data_dir / ".manifest.json"
+    if manifest_file.exists():
+        return json.loads(manifest_file.read_text(encoding="utf-8"))
     return {}
 
 
-def _save_local_manifest(manifest: dict) -> None:
+def _save_local_manifest(manifest: dict, data_dir: Path) -> None:
     """保存 manifest 到本地"""
-    LOCAL_MANIFEST_FILE.parent.mkdir(parents=True, exist_ok=True)
-    LOCAL_MANIFEST_FILE.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    manifest_file = data_dir / ".manifest.json"
+    manifest_file.parent.mkdir(parents=True, exist_ok=True)
+    manifest_file.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def _fetch_remote_manifest() -> dict | None:
+def _fetch_remote_manifest(label: str) -> dict | None:
     """从 HuggingFace 拉取 manifest.json（单文件，极快）"""
     from huggingface_hub import hf_hub_download
 
@@ -72,13 +87,13 @@ def _fetch_remote_manifest() -> dict | None:
         path = hf_hub_download(repo_id=HF_REPO, filename="manifest.json", repo_type="dataset")
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except Exception as e:
-        print(f"[eslbench] 警告: 无法获取远端 manifest ({e})")
+        print(f"[{label}] 警告: 无法获取远端 manifest ({e})")
         return None
 
 
-def _check_download_complete() -> bool:
+def _check_download_complete(data_dir: Path) -> bool:
     """检查是否有至少一个用户数据已下载完整"""
-    user_dirs = _discover_user_dirs()
+    user_dirs = discover_user_dirs(data_dir)
     if not user_dirs:
         return False
     for d in user_dirs:
@@ -87,28 +102,28 @@ def _check_download_complete() -> bool:
     return True
 
 
-def download_from_hf(force: bool = False) -> tuple[Path, bool]:
+def download_from_hf(data_dir: Path, *, label: str = "eslbench", force: bool = False) -> tuple[Path, bool]:
     """基于 manifest.json 增量下载用户数据到 .data/ 目录。返回 (data_dir, data_changed)"""
     import shutil
 
     from huggingface_hub import snapshot_download
 
     # 拉取远端 manifest
-    remote_manifest = _fetch_remote_manifest()
+    remote_manifest = _fetch_remote_manifest(label)
     if remote_manifest is None:
-        if _check_download_complete() and not force:
-            print("[eslbench] 无法连接远端, 使用本地已有数据")
-            return DATA_DIR, False
-        print("[eslbench] 错误: 无法获取远端 manifest 且本地无数据")
-        return DATA_DIR, False
+        if _check_download_complete(data_dir) and not force:
+            print(f"[{label}] 无法连接远端, 使用本地已有数据")
+            return data_dir, False
+        print(f"[{label}] 错误: 无法获取远端 manifest 且本地无数据")
+        return data_dir, False
 
-    local_manifest = _load_local_manifest()
+    local_manifest = _load_local_manifest(data_dir)
 
     # 快速判断: version 相同且非强制 → 无变更
     if not force and remote_manifest.get("version") == local_manifest.get("version"):
-        if _check_download_complete():
-            print("[eslbench] manifest version 一致, 跳过下载")
-            return DATA_DIR, False
+        if _check_download_complete(data_dir):
+            print(f"[{label}] manifest version 一致, 跳过下载")
+            return data_dir, False
 
     # 找出需要下载的批次（新增或 checksum 变更）
     batches_to_download: list[str] = []
@@ -120,17 +135,17 @@ def download_from_hf(force: bool = False) -> tuple[Path, bool]:
         if force or not local_batch or local_batch.get("checksum") != batch_info.get("checksum"):
             batches_to_download.append(batch_id)
 
-    if not batches_to_download and _check_download_complete():
-        print("[eslbench] 所有批次 checksum 一致, 跳过下载")
-        _save_local_manifest(remote_manifest)
-        return DATA_DIR, False
+    if not batches_to_download and _check_download_complete(data_dir):
+        print(f"[{label}] 所有批次 checksum 一致, 跳过下载")
+        _save_local_manifest(remote_manifest, data_dir)
+        return data_dir, False
 
     # 逐批次下载
     total_copied = 0
     for batch_id in batches_to_download:
         batch_info = remote_batches[batch_id]
         user_count = batch_info.get("user_count", "?")
-        print(f"[eslbench] 下载批次 {batch_id} ({user_count} 个用户)...")
+        print(f"[{label}] 下载批次 {batch_id} ({user_count} 个用户)...")
 
         snapshot_dir = snapshot_download(
             repo_id=HF_REPO,
@@ -140,7 +155,7 @@ def download_from_hf(force: bool = False) -> tuple[Path, bool]:
         snapshot_batch = Path(snapshot_dir) / "data" / batch_id
 
         if not snapshot_batch.exists():
-            print(f"[eslbench] 警告: 批次 {batch_id} 下载后目录不存在, 跳过")
+            print(f"[{label}] 警告: 批次 {batch_id} 下载后目录不存在, 跳过")
             continue
 
         # 复制到 .data/{user_dir}/ 扁平结构（去掉 batch 层级）
@@ -148,25 +163,25 @@ def download_from_hf(force: bool = False) -> tuple[Path, bool]:
         for src_dir in sorted(snapshot_batch.iterdir()):
             if not src_dir.is_dir() or src_dir.name.startswith("."):
                 continue
-            dst_dir = DATA_DIR / src_dir.name
+            dst_dir = data_dir / src_dir.name
             dst_dir.mkdir(parents=True, exist_ok=True)
             for src_file in src_dir.iterdir():
                 if src_file.is_file() and src_file.suffix == ".json":
                     shutil.copy2(str(src_file), str(dst_dir / src_file.name))
                     copied += 1
         total_copied += copied
-        print(f"[eslbench] 批次 {batch_id}: {copied} 个文件")
+        print(f"[{label}] 批次 {batch_id}: {copied} 个文件")
 
     # 保存 manifest
-    _save_local_manifest(remote_manifest)
-    print(f"[eslbench] 下载完成: {len(batches_to_download)} 个批次, {total_copied} 个文件")
-    return DATA_DIR, total_copied > 0
+    _save_local_manifest(remote_manifest, data_dir)
+    print(f"[{label}] 下载完成: {len(batches_to_download)} 个批次, {total_copied} 个文件")
+    return data_dir, total_copied > 0
 
 
 # ==================== Step 2: Per-user DuckDB ====================
 
 
-def _bulk_insert_ndjson(con: "duckdb.DuckDBPyConnection", table: str, columns: list[str], rows: list[dict]) -> None:
+def bulk_insert_ndjson(con: "duckdb.DuckDBPyConnection", table: str, columns: list[str], rows: list[dict]) -> None:
     """通过临时 NDJSON 文件批量导入数据到 DuckDB（比 executemany 快 200 倍以上）"""
     import tempfile
 
@@ -184,13 +199,13 @@ def _bulk_insert_ndjson(con: "duckdb.DuckDBPyConnection", table: str, columns: l
         Path(tmp.name).unlink(missing_ok=True)
 
 
-def create_user_duckdb(user_dir: Path, force: bool = False) -> None:
+def create_user_duckdb(user_dir: Path, *, force: bool = False) -> None:
     """为单个用户创建 DuckDB 数据库"""
     import duckdb
 
     db_path = user_dir / "user.duckdb"
     dir_name = user_dir.name
-    email = _dir_to_email(dir_name)
+    email = dir_to_email(dir_name)
 
     if db_path.exists() and not force:
         return
@@ -230,7 +245,7 @@ def create_user_duckdb(user_dir: Path, force: bool = False) -> None:
     """)
 
     # 加载 timeline（自动查找 *_timeline.json）
-    tl_path = _find_timeline(user_dir)
+    tl_path = find_timeline(user_dir)
     if tl_path:
         with open(tl_path, encoding="utf-8") as f:
             data = json.load(f)
@@ -279,19 +294,19 @@ def create_user_duckdb(user_dir: Path, force: bool = False) -> None:
                     }
                 )
 
-        _bulk_insert_ndjson(
+        bulk_insert_ndjson(
             con,
             "device_indicators",
             ["user_id", "time::TIMESTAMP AS time", "indicator", "device_type", "value", "unit"],
             device_rows,
         )
-        _bulk_insert_ndjson(
+        bulk_insert_ndjson(
             con,
             "exam_indicators",
             ["user_id", "time::TIMESTAMP AS time", "indicator", "exam_type", "exam_location", "value", "unit"],
             exam_rows,
         )
-        _bulk_insert_ndjson(
+        bulk_insert_ndjson(
             con,
             "events",
             [
@@ -337,7 +352,7 @@ def create_user_duckdb(user_dir: Path, force: bool = False) -> None:
                         }
                     )
 
-        _bulk_insert_ndjson(
+        bulk_insert_ndjson(
             con,
             "event_indicators",
             [
@@ -363,9 +378,9 @@ def create_user_duckdb(user_dir: Path, force: bool = False) -> None:
     con.close()
 
 
-def build_all_duckdb(force: bool = False) -> None:
+def build_all_duckdb(data_dir: Path, *, label: str = "eslbench", force: bool = False) -> None:
     """为所有用户创建独立 DuckDB"""
-    user_dirs = _discover_user_dirs()
+    user_dirs = discover_user_dirs(data_dir)
     created = 0
     skipped = 0
 
@@ -378,17 +393,75 @@ def build_all_duckdb(force: bool = False) -> None:
         create_user_duckdb(user_dir, force=force)
         created += 1
 
-    print(f"[eslbench] DuckDB 创建完成: {created} 个新建, {skipped} 个已存在跳过")
+    print(f"[{label}] DuckDB 创建完成: {created} 个新建, {skipped} 个已存在跳过")
 
 
-# ==================== Main ====================
+# ==================== Step 3: 生成 JSONL 评测集（可选，ThetaGen 使用） ====================
 
 
-def _check_local_complete() -> bool:
-    """快速本地完整性检查: manifest + 用户数据 + DuckDB 全部就绪"""
-    if not LOCAL_MANIFEST_FILE.exists():
+def build_datasets(benchmark_dir: Path, data_dir: Path, *, label: str = "eslbench", force: bool = False) -> None:
+    """生成每用户 JSONL + 汇总 full.jsonl"""
+    from generator.eslbench.converter import convert_queries
+
+    full_path = benchmark_dir / "full.jsonl"
+    if full_path.exists() and full_path.stat().st_size > 0 and not force:
+        print(f"[{label}] 评测集 JSONL 已存在, 跳过生成")
+        return
+
+    user_dirs = discover_user_dirs(data_dir)
+    all_items: list[dict] = []
+    user_count = 0
+
+    for user_dir in user_dirs:
+        qa_file = user_dir / "kg_evaluation_queries.json"
+        if not qa_file.exists():
+            print(f"[{label}] 警告: {user_dir.name} 缺少 kg_evaluation_queries.json, 跳过")
+            continue
+
+        dir_name = user_dir.name
+        email = dir_to_email(dir_name)
+
+        items = convert_queries(qa_file, user_email=email)
+        if not items:
+            continue
+
+        # 写入每用户 JSONL（文件名 = 目录名.jsonl）
+        user_path = benchmark_dir / f"{dir_name}.jsonl"
+        write_jsonl(items, user_path)
+        print(f"[{label}] 写入 {len(items):>4} 条 -> {dir_name}.jsonl")
+
+        all_items.extend(items)
+        user_count += 1
+
+    # 写入汇总 full.jsonl
+    write_jsonl(all_items, full_path)
+    print(f"[{label}] 写入 {len(all_items):>4} 条 -> full.jsonl ({user_count} 个用户)")
+
+    # 写入 sample.jsonl: 从前 5 个用户的数据合并（从 id 提取用户标识）
+    import random
+
+    def _user_from_id(item_id: str) -> str:
+        """从 id 提取用户标识，如 user101_AT_demo_Q065 → user101_AT_demo"""
+        parts = item_id.rsplit("_Q", 1)
+        return parts[0] if len(parts) == 2 else item_id
+
+    sample_users = sorted(set(_user_from_id(item["id"]) for item in all_items))[:5]
+    sample_items = [item for item in all_items if _user_from_id(item["id"]) in sample_users]
+    random.Random(42).shuffle(sample_items)
+    sample_path = benchmark_dir / "sample.jsonl"
+    write_jsonl(sample_items, sample_path)
+    print(f"[{label}] 写入 {len(sample_items):>4} 条 -> sample.jsonl ({len(sample_users)} 个用户)")
+
+
+# ==================== ESLBench Main ====================
+
+
+def _check_local_complete_eslbench() -> bool:
+    """快速本地完整性检查（ESLBench）: manifest + 用户数据 + DuckDB 全部就绪"""
+    manifest_file = DATA_DIR / ".manifest.json"
+    if not manifest_file.exists():
         return False
-    user_dirs = _discover_user_dirs()
+    user_dirs = discover_user_dirs(DATA_DIR)
     if not user_dirs:
         return False
     for d in user_dirs:
@@ -411,9 +484,9 @@ def main():
     print("=" * 60)
 
     # 快速路径: 本地数据完整 + manifest version 一致 → 秒退
-    if not force and _check_local_complete():
-        remote_manifest = _fetch_remote_manifest()
-        local_manifest = _load_local_manifest()
+    if not force and _check_local_complete_eslbench():
+        remote_manifest = _fetch_remote_manifest("eslbench")
+        local_manifest = _load_local_manifest(DATA_DIR)
         if remote_manifest and remote_manifest.get("version") == local_manifest.get("version"):
             print("[eslbench] 本地数据完整且 manifest version 一致, 跳过准备")
             print("=" * 60)
@@ -421,7 +494,7 @@ def main():
 
     # Step 1: 从 HuggingFace 下载（检测远端变更）
     print("\n--- Step 1: 下载 HuggingFace 数据 ---")
-    _, data_changed = download_from_hf(force=force)
+    _, data_changed = download_from_hf(DATA_DIR, label="eslbench", force=force)
 
     # 远端数据有变更时，级联重建 DuckDB
     rebuild = force or data_changed
@@ -430,13 +503,13 @@ def main():
 
     # Step 2: 创建每用户 DuckDB
     print("\n--- Step 2: 创建每用户 DuckDB ---")
-    build_all_duckdb(force=rebuild)
+    build_all_duckdb(DATA_DIR, label="eslbench", force=rebuild)
 
     # 汇总
     print("\n" + "=" * 60)
     print("准备完成!")
     print(f"  数据目录: {DATA_DIR}/")
-    user_dirs = _discover_user_dirs()
+    user_dirs = discover_user_dirs(DATA_DIR)
     db_count = sum(1 for d in user_dirs if (d / "user.duckdb").exists())
     print(f"  用户数据库: {db_count}/{len(user_dirs)} 个")
     print("=" * 60)

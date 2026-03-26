@@ -43,7 +43,7 @@ _BENCHMARK_DATA_DIR = Path(__file__).resolve().parents[3] / "benchmark" / "data"
 def _load_tool_group(tool_group: str, tool_context: dict[str, Any]) -> tuple[list[BaseTool], type | None]:
     """Load tool group module from benchmark/data/
 
-    tool_group format: "{benchmark}/{tool_name}" e.g. "thetagen/retrieve"
+    tool_group format: "{benchmark}/{tool_name}" e.g. "eslbench/retrieve"
     Resolves to: benchmark/data/{benchmark}/tools/{tool_name}.py
 
     Module must export get_tools(**tool_context) -> list[BaseTool]
@@ -95,7 +95,7 @@ class LlmApiTargetInfo(BaseModel):
                     "_comment": "With tool group",
                     "type": "llm_api",
                     "model": "gpt-5.4",
-                    "tool_group": "thetagen/retrieve",
+                    "tool_group": "eslbench/retrieve",
                     "tool_context": {"user_email": "user110@demo"},
                 },
             ],
@@ -118,7 +118,7 @@ class LlmApiTargetInfo(BaseModel):
     system_prompt: Optional[str] = Field(None, description="System prompt (uses default prompt if not specified)")
     tool_group: Optional[str] = Field(
         None,
-        description="Tool group path (format: '{benchmark}/tools/{name}', e.g. 'thetagen/retrieve', corresponds to .py files under benchmark/data/)",
+        description="Tool group path (format: '{benchmark}/{name}', e.g. 'eslbench/retrieve', corresponds to .py files under benchmark/data/{benchmark}/tools/)",
     )
     tool_context: Optional[Dict[str, Any]] = Field(
         None, description="Tool group runtime context (passed to get_tools(), e.g. user_email etc.)"

@@ -7,7 +7,10 @@ HolyEval is an AI-native, open-source evaluation framework for large language mo
 HolyEval is built from the ground up as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) native project. Every workflow — from initial setup to integrating a new benchmark from a research paper — is available as an interactive slash command. You describe what you want in natural language, and Claude Code handles the rest: reading papers, writing converters, scaffolding plugins, running tests. **You don't need to write a single line of code to use or extend this framework.**
 
 ```bash
-# Reproduce HealthBench (medical AI, 100 cases) — one command
+# ESLBench — synthetic health KG Q&A, 1800 cases across 5 difficulty levels
+python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1
+
+# HealthBench (medical AI, 100 cases)
 python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1
 
 # MedCalc-Bench (medical calculations)
@@ -54,6 +57,21 @@ uv sync
 cp .env.example .env
 # Edit .env — add your OPENAI_API_KEY or GOOGLE_API_KEY
 ```
+
+### Prepare benchmark data
+
+Some benchmarks (like ESLBench) require downloading external data before running. This step is **automatic** when using the Web UI, but needs to be run manually for CLI usage:
+
+```bash
+# ESLBench: download synthetic health KG data from HuggingFace + build per-user DuckDB indexes
+# Requires HF_TOKEN in .env (get one at https://huggingface.co/settings/tokens)
+python -m generator.eslbench.prepare_data
+
+# Force rebuild (re-download + rebuild DuckDB)
+python -m generator.eslbench.prepare_data --force
+```
+
+Other benchmarks (HealthBench, MedCalc, MemoryArena, etc.) ship with data included — no preparation needed.
 
 ### Run your first benchmark
 
@@ -157,7 +175,7 @@ class MyEvalAgent(AbstractEvalAgent, name="my_eval"):
 |---|---|---|
 | **TestAgent** | Virtual user | `auto` (LLM-driven), `manual` (scripted) |
 | **TargetAgent** | System under test | `llm_api` (OpenAI / Gemini) |
-| **EvalAgent** | Evaluator | `semantic`, `keyword`, `preset_answer`, `healthbench`, `medcalc`, `hallucination`, `redteam_compliance`, `memoryarena` |
+| **EvalAgent** | Evaluator | `semantic`, `healthbench`, `medcalc`, `hallucination`, `kg_qa`, `memoryarena` |
 
 ### Project Structure
 
@@ -165,7 +183,9 @@ class MyEvalAgent(AbstractEvalAgent, name="my_eval"):
 holyeval/
 ├── evaluator/          # Core engine: schema, orchestrator, plugin interfaces
 ├── benchmark/          # Runner + datasets (JSONL) + reports
-├── generator/          # Dataset converters (paper → HolyEval format)
+│   └── data/eslbench/  # ESLBench: data + tools (retrieve.py for JSON/DuckDB)
+├── generator/          # Dataset converters + data preparation scripts
+│   └── eslbench/       # ESLBench data downloader + DuckDB builder
 └── web/                # Web UI (FastAPI + htmx)
 ```
 
@@ -173,11 +193,42 @@ holyeval/
 
 | Benchmark | Paper / Source | Datasets | What it evaluates |
 |---|---|---|---|
+| **ESLBench** | ThetaGen KG | `sample50-20260324` (50), `full-20260324` (1800) | Health knowledge graph Q&A |
 | **HealthBench** | OpenAI HealthBench | `sample` (100), `full`, `hard`, `consensus` | Medical AI quality |
 | **MedCalc-Bench** | MedCalc-Bench | `sample`, `full` | Medical calculations |
 | **AgentClinic** | AgentClinic | `medqa` (107), `nejm` (15) | Clinical diagnosis |
 | **MedHall** | Custom | `theta` (30) | Hallucination detection |
 | **MemoryArena** | MemoryArena | `sample` (10), `full` (701) | Agent memory |
+
+### ESLBench — Health Knowledge Graph Q&A
+
+ESLBench evaluates an LLM's ability to answer health questions using structured data retrieval tools (JSON lookup + DuckDB SQL queries). Built on synthetic health knowledge graphs with 20 virtual users, covering 5 difficulty levels:
+
+| Difficulty | Description | Example |
+|---|---|---|
+| **direct** | Direct data retrieval | "What is the patient's blood type?" |
+| **single_hop** | Single-hop reasoning | "What was the latest blood pressure reading?" |
+| **multi_hop** | Multi-hop reasoning | "Which indicators improved after starting medication X?" |
+| **multi_hop_temporal** | Multi-hop + time window | "Average heart rate over the past 30 days?" |
+| **attribution** | Event attribution analysis | "Which event most likely caused the spike in stress levels?" |
+
+**Data preparation required** — ESLBench downloads user data from HuggingFace and builds per-user DuckDB indexes:
+
+```bash
+# First time: prepare data (automatic via Web UI, manual for CLI)
+python -m generator.eslbench.prepare_data
+
+# Run evaluation: LLM + tool-augmented retrieval
+python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1
+
+# Full benchmark (1800 cases, 5 concurrent)
+python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-4.1 -p 5
+
+# Limit to 20 cases for quick testing
+python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-4.1 --limit 20
+```
+
+The LLM target is equipped with a tool group (`eslbench/retrieve`) that provides JSON file reading, DuckDB queries, and indicator lookup — the LLM must use these tools to find answers in the user's health data.
 
 ### Add a new benchmark
 
@@ -239,6 +290,10 @@ Launch with `python -m web`, then visit http://localhost:8000.
 ## CLI Reference
 
 ```bash
+# Prepare benchmark data (required for ESLBench; other benchmarks ship with data)
+python -m generator.eslbench.prepare_data          # download HF data + build DuckDB
+python -m generator.eslbench.prepare_data --force   # force rebuild
+
 # Run benchmark
 python -m benchmark.basic_runner <benchmark> <dataset> [options]
   --target-model MODEL    # LLM model to evaluate (e.g., gpt-4.1, gemini-3-pro)
@@ -267,6 +322,7 @@ Environment variables (in `.env`):
 |---|---|---|
 | `OPENAI_API_KEY` | At least one | OpenAI API key |
 | `GOOGLE_API_KEY` | At least one | Google Gemini API key |
+| `HF_TOKEN` | ESLBench | HuggingFace token for downloading benchmark data |
 | `OPENROUTER_API_KEY` | Optional | OpenRouter multi-provider access |
 | `HOLYEVAL_PORT` | Optional | Web UI port (default: 8000) |
 

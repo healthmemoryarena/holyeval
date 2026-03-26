@@ -149,7 +149,7 @@ class DygRagApiTargetInfo(BaseModel):
                     "_comment": "Default config (uses Gemini for event extraction and QA)",
                     "type": "dyg_rag_api",
                     "model": "gemini-3-pro-preview",
-                    "data_group": "thetagen",
+                    "data_group": "eslbench",
                     "user_email": "user110@demo",
                 },
             ],
@@ -160,7 +160,7 @@ class DygRagApiTargetInfo(BaseModel):
         "gemini-3-pro-preview",
         description="QA generation model (default gemini-3-pro-preview, used for final answer generation)",
     )
-    data_group: str = Field(description="Data directory (benchmark name, e.g. 'thetagen')")
+    data_group: str = Field(description="Data directory (benchmark name, e.g. 'eslbench')")
     user_email: Optional[str] = Field(None, description="User email (maps to .data/{user_dir}/)")
     top_k: int = Field(20, description="DyG-RAG seed event count (starting nodes for graph traversal)", ge=1, le=100)
     enable_graph_traversal: bool = Field(True, description="Enable graph random walk (disabled uses vector retrieval only)")

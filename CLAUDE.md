@@ -19,9 +19,15 @@ python -m benchmark.basic_runner healthbench hard --target-model gemini-3-pro -p
 python -m benchmark.basic_runner medcalc sample --target-model gpt-4.1
 python -m benchmark.basic_runner agentclinic medqa --target-model gpt-4.1
 python -m benchmark.basic_runner memoryarena sample --target-model gpt-4.1
+python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1        # ESLBench quick (50 cases)
+python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-4.1 -p 5       # ESLBench full (1800 cases)
 python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --ids hb_abc
 python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 10 -p 3 -v
 python -m benchmark.basic_runner healthbench sample --resume
+
+# Data preparation (required before running ESLBench via CLI; automatic via Web UI)
+python -m generator.eslbench.prepare_data            # download HF data + build per-user DuckDB
+python -m generator.eslbench.prepare_data --force    # force re-download + rebuild
 
 # Data conversion (external datasets → HolyEval format)
 python -m generator.healthbench.converter input.jsonl output.jsonl --target-model gpt-4.1
@@ -82,7 +88,7 @@ Plugins activate on import (in `evaluator/plugin/`). The `core/` layer depends o
 |---|---|---|
 | **TestAgent** (virtual user) | `core/interfaces/abstract_test_agent.py` | `auto` (LLM-driven), `manual` (scripted) |
 | **TargetAgent** (system under test) | `core/interfaces/abstract_target_agent.py` | `llm_api` (OpenAI/Gemini) |
-| **EvalAgent** (evaluator) | `core/interfaces/abstract_eval_agent.py` | `semantic`, `keyword`, `preset_answer`, `healthbench`, `medcalc`, `hallucination`, `redteam_compliance`, `memoryarena` |
+| **EvalAgent** (evaluator) | `core/interfaces/abstract_eval_agent.py` | `semantic`, `healthbench`, `medcalc`, `hallucination`, `kg_qa`, `memoryarena` |
 
 Add custom plugins by inheriting from the abstract base classes. Use `/add-eval-agent` or `/add-target-agent` skills for guided scaffolding.
 
@@ -121,6 +127,9 @@ uv workspace monorepo with four members:
 ```
 benchmark/
 ├── data/
+│   ├── eslbench/         # ESLBench health KG Q&A (requires data preparation)
+│   │   ├── tools/        # retrieve.py — JSON lookup + DuckDB query tools
+│   │   └── .data/        # Downloaded user data + DuckDB (auto-created by prepare_data)
 │   ├── healthbench/      # HealthBench medical AI
 │   ├── medcalc/          # MedCalc-Bench calculations
 │   ├── agentclinic/      # AgentClinic clinical diagnosis
@@ -165,6 +174,7 @@ Key fields:
 
 `generator/` transforms external datasets into HolyEval BenchItem format:
 
+- **`generator/eslbench/prepare_data.py`** — ESLBench data preparation: HuggingFace download + per-user DuckDB creation
 - **`generator/healthbench/converter.py`** — HealthBench JSONL → BenchItem
 - **`generator/medcalc/converter.py`** — MedCalc-Bench CSV → BenchItem
 - **`generator/agentclinic/converter.py`** — AgentClinic JSONL → BenchItem
@@ -193,6 +203,7 @@ Configure in `.env` (copy from `.env.example`):
 |---|---|---|
 | `OPENAI_API_KEY` | At least one LLM | OpenAI API key |
 | `GOOGLE_API_KEY` | At least one LLM | Google Gemini API key |
+| `HF_TOKEN` | ESLBench | HuggingFace token for downloading ESLBench data |
 | `OPENROUTER_API_KEY` | Optional | OpenRouter multi-provider access |
 | `HOLYEVAL_PORT` | Optional | Web UI port (default: 8000) |
 

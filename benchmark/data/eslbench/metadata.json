@@ -71,7 +71,7 @@
           "required": true
         },
         "data_group": {
-          "default": "thetagen",
+          "default": "eslbench",
           "editable": false
         },
         "user_email": {
@@ -119,7 +119,7 @@
           "required": true
         },
         "data_group": {
-          "default": "thetagen",
+          "default": "eslbench",
           "editable": false
         },
         "user_email": {

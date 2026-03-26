@@ -349,7 +349,7 @@ async def _build_or_get_index(
 
     if not meta_file.exists():
         try:
-            from generator.thetagen.prepare_hippo_cache import download_hippo_cache
+            from generator.eslbench.prepare_hippo_cache import download_hippo_cache
             logger.info("[HippoRAG] 本地无缓存, 尝试从 HuggingFace 下载预构建缓存...")
             download_hippo_cache()
         except Exception as e:
@@ -905,7 +905,7 @@ class HippoRagApiTargetInfo(BaseModel):
                     "_comment": "Default config (aligned with remote HippoRAG)",
                     "type": "hippo_rag_api",
                     "model": "gemini-3-flash-preview",
-                    "data_group": "thetagen",
+                    "data_group": "eslbench",
                     "user_email": "user110@demo",
                 },
             ],
@@ -929,7 +929,7 @@ class HippoRagApiTargetInfo(BaseModel):
         "text-embedding-3-large",
         description="Embedding model (default text-embedding-3-large, aligned with remote HippoRAG)",
     )
-    data_group: str = Field(description="Data directory (benchmark name, e.g. 'thetagen')")
+    data_group: str = Field(description="Data directory (benchmark name, e.g. 'eslbench')")
     user_email: Optional[str] = Field(None, description="User email (maps to .data/{user_dir}/)")
     top_k: int = Field(10, description="Number of documents fed to LLM in QA phase (aligned with remote qa_top_k)", ge=1, le=50)
     max_chunk_chars: int = Field(

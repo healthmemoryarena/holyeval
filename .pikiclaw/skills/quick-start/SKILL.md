@@ -51,7 +51,7 @@ cp .env.example .env
 | `OPENAI_API_KEY` | OpenAI API 密钥（gpt-4.1 等） | https://platform.openai.com/api-keys |
 | `GOOGLE_API_KEY` | Google AI API 密钥（gemini-3 等） | https://aistudio.google.com/apikey |
 | `OPENROUTER_API_KEY` | OpenRouter 统一多提供商访问（可选） | https://openrouter.ai/keys |
-| `HF_TOKEN` | HuggingFace Token（thetagen 私有数据集必填，未配置会导致启动时数据准备失败） | https://huggingface.co/settings/tokens |
+| `HF_TOKEN` | HuggingFace Token（ESLBench 数据下载必填，未配置会导致 ESLBench 数据准备失败，不影响其他 benchmark） | https://huggingface.co/settings/tokens |
 | `THETA_API_BASE_URL` | Theta Health API 地址（可选） | 内部系统，联系团队获取 |
 
 如果已有有效 key，直接继续。
@@ -84,6 +84,33 @@ python -c "import evaluator; import benchmark; import generator; print('OK')"
 ```
 
 如果有报错，诊断并修复后再继续。
+
+### Step 4.5: 准备 Benchmark 数据
+
+部分 benchmark（如 ESLBench）需要从外部下载数据并建立索引。Web UI 启动时会通过 PrepareManager 自动执行含 `prepare` 字段的 benchmark 准备脚本，但 CLI 场景需要手动运行。
+
+检查 `.env` 中 `HF_TOKEN` 是否已配置。如果已配置，执行数据准备：
+
+```bash
+# ESLBench: 从 HuggingFace 下载合成健康 KG 数据 + 建立 per-user DuckDB 索引
+python -m generator.eslbench.prepare_data
+```
+
+如果 `HF_TOKEN` 未配置（还是占位符 `hf_xxx`），**提示用户**：
+- ESLBench 需要 HuggingFace Token 才能下载数据
+- 获取方式：https://huggingface.co/settings/tokens
+- 不配置也不影响其他 benchmark 的使用，可以后续再配置
+
+**注意**：
+- 首次下载可能需要几分钟（取决于网络）
+- 数据下载到 `benchmark/data/eslbench/.data/` 目录
+- 支持增量更新，后续运行会跳过已下载的数据
+- Web UI 启动时会自动执行此步骤，无需手动运行
+
+如果准备脚本报错但非关键（如网络临时问题），提示用户可以稍后重试：
+```bash
+python -m generator.eslbench.prepare_data --force  # 强制重建
+```
 
 ### Step 5: 启动框架层 Web UI
 

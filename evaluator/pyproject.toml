@@ -14,6 +14,22 @@ dependencies = [
     "cryptography>=44.0",
 ]
 
+[project.optional-dependencies]
+# vendor/dyg_graphrag 依赖（均有 try/except ImportError 保护）
+# 安装: uv sync --extra rag
+# GPU 推理另需: uv pip install torch sentence-transformers
+rag = [
+    "networkx>=3.6.1",
+    "nano-vectordb>=0.0.4.3",
+    "numpy>=2.4.3",
+    "tiktoken>=0.12.0",
+    "aioboto3>=15.5.0",
+    "python-dateutil>=2.9.0.post0",
+    "hnswlib>=0.8.0",
+    "neo4j>=6.1.0",
+    "pandas>=3.0.1",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

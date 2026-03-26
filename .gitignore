@@ -51,13 +51,11 @@ data_local
 !.pikiclaw/skills/
 !.pikiclaw/skills/**
 
-!benchmark/data/*/tools/
-
 # === OPENSOURCE-EXCLUDE START ===
 # Auto-generated from .opensource-exclude — do not edit manually
 hma-web/
 scripts/
-tools/
+/tools/
 data_local/
 .opensource-exclude
 evaluator/plugin/target_agent/theta_api_target_agent.py
@@ -107,5 +105,3 @@ __pycache__/
 *.pyc
 .DS_Store
 # === OPENSOURCE-EXCLUDE END ===
-\!benchmark/data/*/tools/
-\!benchmark/data/*/tools/**
