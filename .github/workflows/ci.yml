@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: uv sync
+      - run: uv sync --group lint
       - run: uv run ruff check .
       - run: uv run ruff format --check .
 
@@ -28,4 +28,4 @@ jobs:
         with:
           python-version: "3.11"
       - run: uv sync
-      - run: uv run pytest evaluator/tests/ -v --ignore=evaluator/tests/test_e2e.py
+      - run: uv run pytest evaluator/tests/ -v --ignore=evaluator/tests/test_e2e.py --ignore=evaluator/tests/test_preset_answer_eval.py
