@@ -66,6 +66,8 @@ evaluator/plugin/eval_agent/indicator_recall_eval_agent.py
 evaluator/plugin/eval_agent/preset_answer_eval_agent.py
 evaluator/plugin/eval_agent/keyword_eval_agent.py
 evaluator/plugin/eval_agent/redteam_compliance_eval_agent.py
+evaluator/plugin/eval_agent/hallucination_eval_agent.py
+evaluator/plugin/eval_agent/memoryarena_eval_agent.py
 evaluator/utils/theta_config.py
 evaluator/utils/remote_config.py
 benchmark/data/eslbench/ablation_*
@@ -73,6 +75,9 @@ benchmark/data/agentclinic/
 benchmark/data/thetagen/
 benchmark/data/thetagen_sampling/
 benchmark/data/extraction/
+benchmark/data/medhall/
+benchmark/data/history_demo/
+benchmark/data/memoryarena/
 benchmark/data/aq_redteam/
 benchmark/multi_agent_runner.py
 benchmark/pairwise_eval.py
@@ -87,6 +92,17 @@ generator/theta_benchmark/
 generator/thetagen/
 generator/thetagendata/
 generator/aq_redteam/
+generator/medhall/
+generator/memoryarena/
+evaluator/tests/
+benchmark/tests/
+web/tests/
+benchmark/data/eslbench/tools/
+generator/medcalc/data/
+docs/ablation_*
+docs/batch_*
+docs/medhall_*
+docs/architecture-cn.png
 CLAUDE.opensource.md
 README.opensource.md
 .env.opensource.example

@@ -1,10 +1,41 @@
-# HolyEval
+<h1 align="center">
+  <br>
+  HolyEval
+  <br>
+</h1>
 
-**Reproduce any LLM benchmark with one command. Build your own with pluggable agents. No code required — just talk to Claude Code.**
+<p align="center">
+  <strong>Reproduce any LLM benchmark with one command. Build your own with pluggable agents.<br>No code required — just talk to Claude Code.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/healthmemoryarena/holyeval/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-3776AB.svg?logo=python&logoColor=white" alt="Python 3.11+"></a>
+  <a href="https://docs.anthropic.com/en/docs/claude-code"><img src="https://img.shields.io/badge/Claude_Code-native-cc785c.svg?logo=anthropic&logoColor=white" alt="Claude Code Native"></a>
+  <a href="https://huggingface.co/datasets/healthmemoryarena/ESL-Bench"><img src="https://img.shields.io/badge/%F0%9F%A4%97_HuggingFace-ESL--Bench-FFD21E.svg" alt="HuggingFace Dataset"></a>
+  <a href="http://healthmemoryarena.ai"><img src="https://img.shields.io/badge/%F0%9F%8C%90_Live-Health_Memory_Arena-black.svg" alt="Live Demo"></a>
+  <a href="https://github.com/healthmemoryarena/holyeval/stargazers"><img src="https://img.shields.io/github/stars/healthmemoryarena/holyeval?style=social" alt="GitHub Stars"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#ai-native-development-with-claude-code">Claude Code</a> &middot;
+  <a href="#web-ui">Web UI</a> &middot;
+  <a href="http://healthmemoryarena.ai">Live Demo</a> &middot;
+  <a href="https://huggingface.co/datasets/healthmemoryarena/ESL-Bench">Dataset</a> &middot;
+  <a href="#benchmarks">Benchmarks</a> &middot;
+  <a href="#contributing">Contributing</a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/holyeval_tasks.jpg" alt="HolyEval Web UI — Run Evaluations" width="80%">
+</p>
+
+---
 
 HolyEval is an AI-native, open-source evaluation framework for large language models. Drop in a benchmark dataset, run one command, get a scored report. Extend it with custom evaluators, target systems, and virtual users via a pluggable agent architecture.
 
-HolyEval is built from the ground up as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) native project. Every workflow — from initial setup to integrating a new benchmark from a research paper — is available as an interactive slash command. You describe what you want in natural language, and Claude Code handles the rest: reading papers, writing converters, scaffolding plugins, running tests. **You don't need to write a single line of code to use or extend this framework.**
+Built from the ground up as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) native project — every workflow, from initial setup to integrating a new benchmark from a research paper, is an interactive slash command. You describe what you want in natural language, and Claude Code handles the rest. **You don't need to write a single line of code to use or extend this framework.**
 
 ```bash
 # ESLBench — synthetic health KG Q&A, 1800 cases across 5 difficulty levels
@@ -50,7 +81,7 @@ Claude Code will check your environment, install dependencies, walk you through 
 **Prerequisites:** Python 3.11+, [uv](https://docs.astral.sh/uv/) package manager, at least one LLM API key (OpenAI or Google Gemini).
 
 ```bash
-git clone https://github.com/anthropics/holyeval.git
+git clone https://github.com/healthmemoryarena/holyeval.git
 cd holyeval
 uv sync
 
@@ -75,6 +106,10 @@ Other benchmarks (HealthBench, MedCalc, MemoryArena, etc.) ship with data includ
 
 ### Run your first benchmark
 
+<p align="center">
+  <img src="docs/screenshots/holyeval_run_benchmark.gif" alt="Run Benchmark Demo" width="80%">
+</p>
+
 ```bash
 # Quick smoke test: 10 HealthBench cases, 3 concurrent
 python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 10 -p 3
@@ -94,7 +129,7 @@ python -m web    # http://localhost:8000
 
 ## AI-Native Development with Claude Code
 
-HolyEval is designed to be operated entirely through [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Every common task — from project setup, to running evaluations, to integrating a brand-new benchmark from a research paper — has a dedicated slash command. You describe your intent in natural language; Claude Code reads the code, generates files, runs tests, and validates the result.
+HolyEval is designed to be operated entirely through [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Every common task has a dedicated slash command. You describe your intent in natural language; Claude Code reads the code, generates files, runs tests, and validates the result.
 
 **You don't need to memorize CLI flags, read source code, or write boilerplate.** Just type the slash command and follow the conversation.
 
@@ -102,15 +137,54 @@ HolyEval is designed to be operated entirely through [Claude Code](https://docs.
 
 | What you want to do | Command | What Claude Code does for you |
 |---|---|---|
-| **Set up the project** | `/quick-start` | Checks Python/uv, installs dependencies, configures `.env` with your API keys, launches Web UI — fully interactive, no manual steps |
-| **Run a benchmark** | `/run-benchmark` | Asks which benchmark & dataset, then executes with your chosen model, concurrency, and limits. Shows progress and report path |
-| **Integrate a new benchmark** | `/add-benchmark` | End-to-end: reads the paper/repo → analyzes data format → writes the data converter → creates `metadata.json` + JSONL → validates with a test run |
-| **Add a custom evaluator** | `/add-eval-agent` | Gathers your evaluation logic requirements → scaffolds config model + plugin implementation + registration. Immediately available in CLI & Web UI |
+| **Set up the project** | `/quick-start` | Checks Python/uv, installs dependencies, configures `.env` with your API keys, launches Web UI |
+| **Run a benchmark** | `/run-benchmark` | Asks which benchmark & dataset, then executes with your chosen model and concurrency |
+| **Integrate a new benchmark** | `/add-benchmark` | End-to-end: reads the paper/repo → analyzes data format → writes the converter → creates dataset → validates |
+| **Add a custom evaluator** | `/add-eval-agent` | Scaffolds config model + plugin implementation + registration. Immediately available in CLI & Web UI |
 | **Add a new target system** | `/add-target-agent` | Scaffolds connection handling, message processing, and cleanup for a new system under test |
 | **Run end-to-end tests** | `/run-e2e-test` | Verifies all components (TestAgent ↔ TargetAgent ↔ EvalAgent ↔ Orchestrator) work together |
 | **Audit architecture** | `/review-architecture` | Checks GitOps compliance, plugin isolation, shared-layer reuse. Reports violations with fix suggestions |
 
-### Example Workflows
+### Example: Integrating HealthBench from a Research Paper
+
+This is a real example of how Claude Code integrates a published benchmark into HolyEval — end-to-end, from paper to runnable evaluation:
+
+<p align="center">
+  <img src="docs/screenshots/holyeval_add_benchmark.gif" alt="Add Benchmark Demo" width="80%">
+</p>
+
+```
+You:  /add-benchmark
+
+      Paper: https://arxiv.org/abs/2505.07469
+      HealthBench is OpenAI's medical AI evaluation benchmark with 5,000+
+      rubric-graded questions across safety, reasoning, and instruction following.
+
+Claude: I'll read the paper and source repo to understand the data format...
+        ✓ Found: JSONL with multi-turn prompts + rubric criteria
+        ✓ Evaluation method: per-rubric LLM-as-Judge grading
+
+        Generating converter: generator/healthbench/converter.py
+        - Maps prompt → history + strict_inputs
+        - Maps rubrics → eval.rubrics (criterion + points)
+        - Sets user.type = "manual", target.type = "llm_api"
+
+        Generating dataset: benchmark/data/healthbench/
+        - metadata.json (target config + description)
+        - sample.jsonl (100 cases, stratified sampling)
+        - full.jsonl (5,000+ cases)
+        - hard.jsonl / consensus.jsonl (subsets)
+
+        Running validation: 3 cases with gpt-4.1...
+        ✓ All 3 passed — benchmark ready!
+
+You:  python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1
+      # Running... 100 cases → report saved
+```
+
+> **The entire integration — reading the paper, writing the converter, creating datasets, validating — takes one conversation.** No boilerplate, no manual file creation, no debugging import paths.
+
+### More Workflow Examples
 
 **"I want to reproduce HealthBench on GPT-4.1"**
 ```
@@ -121,31 +195,72 @@ HolyEval is designed to be operated entirely through [Claude Code](https://docs.
 # Running... 100 cases, 5 concurrent → report saved
 ```
 
-**"I found a new medical benchmark paper, I want to add it"**
-```
-> /add-benchmark
-# Claude reads the paper/repo, asks you to confirm:
-#   - benchmark name, data format, evaluation method
-# Then auto-generates:
-#   - generator/<name>/converter.py (data conversion)
-#   - benchmark/data/<name>/metadata.json + dataset.jsonl
-#   - validates with a test run
-# Done — new benchmark works in CLI and Web UI immediately
-```
-
 **"I need a custom evaluator that checks citation accuracy"**
 ```
 > /add-eval-agent
 # Claude asks: plugin name? → citation_accuracy
 # What does it evaluate? → checks if AI responses cite valid sources
-# Config fields needed? → threshold (float), source_list (list)
-# Generates:
-#   - evaluator/plugin/eval_agent/citation_accuracy_eval_agent.py
-#   - registered automatically via __init_subclass__
-# Ready to use in any benchmark or test case
+# Generates: evaluator/plugin/eval_agent/citation_accuracy_eval_agent.py
+# Registered automatically via __init_subclass__ — ready to use
 ```
 
-> **Tip:** You're not limited to slash commands. Claude Code understands the full codebase — you can ask it anything in natural language, like *"explain how the plugin system works"* or *"why did this test case fail?"*.
+> **Tip:** You're not limited to slash commands. Claude Code understands the full codebase — ask it anything in natural language, like *"explain how the plugin system works"* or *"why did this test case fail?"*.
+
+## Web UI
+
+Launch with `python -m web`, then visit http://localhost:8000.
+
+<table>
+<tr>
+<td width="50%">
+
+**Run Evaluations** — Select benchmark, configure parameters, launch tasks with real-time SSE progress tracking.
+
+<img src="docs/screenshots/holyeval_tasks.jpg" alt="Run Evaluations" width="100%">
+</td>
+<td width="50%">
+
+**Evaluation Report** — Scored results with expandable cases, dialogue history, and per-case feedback.
+
+<img src="docs/screenshots/holyeval_report.jpg" alt="Evaluation Report" width="100%">
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Browse Benchmarks** — Overview of all benchmark datasets with case counts and statistics.
+
+<img src="docs/screenshots/holyeval_benchmarks.jpg" alt="Browse Benchmarks" width="100%">
+</td>
+<td width="50%">
+
+**Agent Registry** — Inspect all registered plugins with config schemas, features, and cost estimates.
+
+<img src="docs/screenshots/holyeval_agents.jpg" alt="Agent Registry" width="100%">
+</td>
+</tr>
+</table>
+
+## Health Memory Arena — Live Evaluation Platform
+
+[Health Memory Arena](http://healthmemoryarena.ai) (HMA) is the public evaluation platform powered by HolyEval. It hosts the ESL-Bench leaderboard where health AI agents compete on structured longitudinal reasoning tasks.
+
+<table>
+<tr>
+<td width="33%">
+<a href="http://healthmemoryarena.ai"><img src="docs/screenshots/hma_home.jpg" alt="HMA Home" width="100%"></a>
+<p align="center"><em>Platform Home</em></p>
+</td>
+<td width="33%">
+<a href="http://healthmemoryarena.ai/leaderboard"><img src="docs/screenshots/hma_leaderboard.jpg" alt="HMA Leaderboard" width="100%"></a>
+<p align="center"><em>Agent Leaderboard</em></p>
+</td>
+<td width="33%">
+<a href="http://healthmemoryarena.ai/dataset"><img src="docs/screenshots/hma_dataset.jpg" alt="HMA Dataset" width="100%"></a>
+<p align="center"><em>Dataset Browser</em></p>
+</td>
+</tr>
+</table>
 
 ## Architecture
 
@@ -158,6 +273,10 @@ TestCase (JSON) → Orchestrator
 ```
 
 All execution paths (CLI, Web UI, programmatic) funnel through a single entry point: `do_single_test()`.
+
+<p align="center">
+  <img src="docs/architecture.png" alt="HolyEval Architecture" width="80%">
+</p>
 
 ### Plugin System
 
@@ -194,11 +313,11 @@ holyeval/
 | Benchmark | Paper / Source | Datasets | What it evaluates |
 |---|---|---|---|
 | **ESLBench** | ThetaGen KG | `sample50-20260324` (50), `full-20260324` (1800) | Health knowledge graph Q&A |
-| **HealthBench** | OpenAI HealthBench | `sample` (100), `full`, `hard`, `consensus` | Medical AI quality |
-| **MedCalc-Bench** | MedCalc-Bench | `sample`, `full` | Medical calculations |
-| **AgentClinic** | AgentClinic | `medqa` (107), `nejm` (15) | Clinical diagnosis |
+| **HealthBench** | [OpenAI HealthBench](https://arxiv.org/abs/2505.07469) | `sample` (100), `full`, `hard`, `consensus` | Medical AI quality |
+| **MedCalc-Bench** | [MedCalc-Bench](https://arxiv.org/abs/2406.12036) | `sample`, `full` | Medical calculations |
+| **AgentClinic** | [AgentClinic](https://arxiv.org/abs/2405.07960) | `medqa` (107), `nejm` (15) | Clinical diagnosis |
 | **MedHall** | Custom | `theta` (30) | Hallucination detection |
-| **MemoryArena** | MemoryArena | `sample` (10), `full` (701) | Agent memory |
+| **MemoryArena** | [MemoryArena](https://arxiv.org/abs/2501.13916) | `sample` (10), `full` (701) | Agent memory |
 
 ### ESLBench — Health Knowledge Graph Q&A
 
@@ -274,18 +393,6 @@ class MyTargetAgent(AbstractTargetAgent, name="my_target"):
 ```
 
 Use `/add-eval-agent` or `/add-target-agent` Claude Code skills for guided scaffolding.
-
-## Web UI
-
-Launch with `python -m web`, then visit http://localhost:8000.
-
-| Page | Route | Description |
-|------|-------|-------------|
-| Run evaluations | `/tasks` | Select benchmark, configure, launch with real-time SSE progress |
-| Task details | `/tasks/{id}` | Progress cards, expandable cases with dialogue and feedback |
-| Reports | `/reports/{benchmark}/{file}` | Scored report viewer |
-| Datasets | `/benchmarks` | Browse benchmark datasets |
-| Agent registry | `/agents/*` | Inspect registered plugins |
 
 ## CLI Reference
 
