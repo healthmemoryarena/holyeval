@@ -1,0 +1,203 @@
+{# Shared cost calculation utilities — used by tasks/detail.html and reports/detail.html #}
+<script>
+/* Token pricing (USD / 1M tokens) — updated 2026-02
+   cached_input: price for cache-hit input tokens
+   Sources: openai.com/api/pricing, ai.google.dev/gemini-api/docs/pricing,
+            anthropic.com/claude/sonnet, openrouter.ai */
+const _tokenPricing = {
+    // OpenAI — Flagship
+    'gpt-5.4':                  { input: 2.50, cached_input: 0.25, output: 15.00 },
+    'gpt-5.2':                  { input: 1.75, cached_input: 0.175, output: 14.00 },
+    'gpt-5-mini':               { input: 0.25, cached_input: 0.025, output: 2.00 },
+    // OpenAI — GPT-4.1 series
+    'gpt-4.1':                  { input: 3.00, cached_input: 0.75, output: 12.00 },
+    'gpt-4.1-mini':             { input: 0.80, cached_input: 0.20, output: 3.20 },
+    'gpt-4.1-nano':             { input: 0.20, cached_input: 0.05, output: 0.80 },
+    // Google Gemini 3.1
+    'gemini-3.1-pro-preview':   { input: 2.00, cached_input: 0.20, output: 12.00 },
+    'gemini-3.1-flash-lite-preview':    { input: 0.25, cached_input: 0.025, output: 1.50 },
+    // Google Gemini 3
+    'gemini-3-pro-preview':     { input: 2.00, cached_input: 0.20, output: 12.00 },
+    'gemini-3-flash-preview':   { input: 0.50, cached_input: 0.05, output: 3.00 },
+    // Anthropic (via OpenRouter)
+    'anthropic/claude-opus-4.6':   { input: 5.00, cached_input: 0.50, output: 25.00 },
+    'anthropic/claude-sonnet-4.6': { input: 3.00, cached_input: 0.30, output: 15.00 },
+    // Zhipu (via OpenRouter)
+    'z-ai/glm-5':              { input: 0.80, cached_input: 0.40, output: 2.56 },
+};
+const _defaultPricing = { input: 2.00, cached_input: 0.50, output: 8.00 };
+
+function _calcUsageCost(usageDict) {
+    /* Calculate USD cost from {model: {input_tokens, output_tokens, input_token_details?}}
+       input_token_details.cache_read uses discounted rate, rest uses full price */
+    let cost = 0;
+    if (!usageDict) return cost;
+    for (const [model, usage] of Object.entries(usageDict)) {
+        const p = _tokenPricing[model] || _defaultPricing;
+        const totalInput = usage.input_tokens || 0;
+        const cachedInput = usage.input_token_details?.cache_read || 0;
+        const freshInput = totalInput - cachedInput;
+        cost += freshInput * p.input / 1e6;
+        cost += cachedInput * (p.cached_input ?? p.input) / 1e6;
+        cost += (usage.output_tokens || 0) * p.output / 1e6;
+    }
+    return cost;
+}
+
+/** Extract target cost — prefers API-returned total_cost, falls back to token estimation */
+function _targetCostFromDetail(cost) {
+    if (cost?.target_detail?.total_cost != null) return cost.target_detail.total_cost;
+    return _calcUsageCost(cost?.target);
+}
+
+function _formatCost(usd) {
+    if (usd === 0) return '—';
+    if (usd < 0.001) return '<$0.001';
+    if (usd < 0.01) return '$' + usd.toFixed(4);
+    if (usd < 1) return '$' + usd.toFixed(3);
+    if (usd < 100) return '$' + usd.toFixed(2);
+    return '$' + Math.round(usd);
+}
+
+function _sumTokens(usageDict, field) {
+    if (!usageDict) return 0;
+    return Object.values(usageDict).reduce((s, u) => s + (u[field] || 0), 0);
+}
+
+/** Aggregate statistics from a list of cost objects */
+function _aggregateCosts(costList) {
+    let costTest = 0, costTarget = 0, costEval = 0, totalTokens = 0;
+    for (const cost of costList) {
+        if (!cost) continue;
+        costTest += _calcUsageCost(cost.test);
+        costTarget += _targetCostFromDetail(cost);
+        costEval += _calcUsageCost(cost.eval);
+        // target tokens: sum sub-agent tokens when breakdown is available
+        let targetTokens = 0;
+        const bd = cost.target_detail?.breakdown;
+        if (bd?.length) {
+            for (const item of bd) targetTokens += (item.input_tokens || 0) + (item.output_tokens || 0);
+        } else {
+            targetTokens = _sumTokens(cost.target, 'total_tokens');
+        }
+        totalTokens += _sumTokens(cost.test, 'total_tokens')
+                     + targetTokens
+                     + _sumTokens(cost.eval, 'total_tokens');
+    }
+    const totalCost = costTest + costTarget + costEval;
+    return {
+        totalCostLabel: _formatCost(totalCost),
+        totalTokens,
+        costByRole: {
+            test: _formatCost(costTest),
+            target: _formatCost(costTarget),
+            eval: _formatCost(costEval),
+            testVal: costTest,
+            targetVal: costTarget,
+            evalVal: costEval,
+        },
+    };
+}
+
+/** Cost rows for a single case (used in cost breakdown table) */
+function _caseCostRows(c) {
+    const rows = [];
+    const roleNames = { test: 'Test', target: 'Target', eval: 'Eval' };
+    const td = c.cost?.target_detail;
+
+    // Target rows: prefer breakdown, then total_cost, fall back to token estimation
+    if (td?.breakdown?.length) {
+        const multi = td.breakdown.length > 1;
+        for (const item of td.breakdown) {
+            let role = 'Target';
+            if (multi && item.source && item.source !== 'main') {
+                const label = item.source.startsWith('sub:') ? item.source.slice(4) : item.source;
+                role = '↳ ' + label;
+            }
+            rows.push({
+                role, model: item.model || td.model || 'unknown',
+                input: item.input_tokens || 0,
+                output: item.output_tokens || 0,
+                costLabel: item.total_cost != null ? _formatCost(item.total_cost) : '—',
+            });
+        }
+    } else if (td?.total_cost != null) {
+        // Has total_cost but no breakdown — use API cost
+        const usage = c.cost?.target;
+        if (usage) {
+            for (const [model, u] of Object.entries(usage)) {
+                rows.push({
+                    role: 'Target', model,
+                    input: u.input_tokens || 0,
+                    output: u.output_tokens || 0,
+                    costLabel: _formatCost(td.total_cost),
+                });
+            }
+        }
+    } else {
+        // No target_detail — fall back to token estimation
+        const usage = c.cost?.target;
+        if (usage) {
+            for (const [model, u] of Object.entries(usage)) {
+                rows.push({
+                    role: 'Target', model,
+                    input: u.input_tokens || 0,
+                    output: u.output_tokens || 0,
+                    costLabel: _formatCost(_calcUsageCost({ [model]: u })),
+                });
+            }
+        }
+    }
+
+    // Eval + Test: use token estimation
+    for (const role of ['eval', 'test']) {
+        const usage = c.cost?.[role];
+        if (!usage) continue;
+        for (const [model, u] of Object.entries(usage)) {
+            rows.push({
+                role: roleNames[role], model,
+                input: u.input_tokens || 0,
+                output: u.output_tokens || 0,
+                costLabel: _formatCost(_calcUsageCost({ [model]: u })),
+            });
+        }
+    }
+    return rows;
+}
+
+/** Total cost for a single case */
+function _caseCost(c) {
+    if (!c?.cost) return 0;
+    return _calcUsageCost(c.cost.test) + _targetCostFromDetail(c.cost) + _calcUsageCost(c.cost.eval);
+}
+
+/** Total tokens of a given type for a single case */
+function _caseCostTotalTokens(c, field) {
+    if (!c?.cost) return 0;
+    const key = field + '_tokens';
+    let targetTokens = 0;
+    const bd = c.cost?.target_detail?.breakdown;
+    if (bd?.length) {
+        for (const item of bd) targetTokens += item[key] || 0;
+    } else {
+        targetTokens = _sumTokens(c.cost.target, key);
+    }
+    return _sumTokens(c.cost.test, key) + targetTokens + _sumTokens(c.cost.eval, key);
+}
+
+/* ---- Agent config display utilities ---- */
+
+/** Extract displayable [key, value] entries from a config dict */
+function _configEntries(cfg) {
+    if (!cfg) return [];
+    return Object.entries(cfg).filter(([k, v]) => v != null);
+}
+
+/** Format a config value for display */
+function _formatCfgVal(v) {
+    if (Array.isArray(v)) return v.length + ' items';
+    if (typeof v === 'object' && v !== null) return JSON.stringify(v);
+    const s = String(v);
+    return s.length > 80 ? s.slice(0, 80) + '…' : s;
+}
+</script>

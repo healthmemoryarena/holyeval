@@ -1,0 +1,142 @@
+{
+  "description": "# ThetaGen KG 知识问答评测\n\n基于 thetagendata 知识图谱生成的确定性评测集，20 个虚拟用户 × 100 题，覆盖 5 个难度等级:\n- **direct**: 直接数据检索（profile/device/exam/event 属性）\n- **single_hop**: 单跳推理（沿一条边遍历/聚合）\n- **multi_hop**: 多跳推理（跨多边集合运算）\n- **multi_hop_temporal**: 多跳 + 时间窗口统计\n- **attribution**: 事件归因分析\n\n| 数据集 | 说明 | 条数 |\n|--------|------|------|\n| `full` | 全量汇总（20 用户） | ~2000 |\n| `user_{id}` | 单用户评测集 | ~100 |\n| `sample` | 旧版抽样（兼容） | 100 |\n\n### Target 类型\n- **theta_api**: Theta Health API（默认 expert agent）\n- **llm_api**: 基模 + retrieve 工具组（文件检索 + DuckDB 查询）\n\n评估器: `kg_qa`（混合规则/LLM，按 answer_type 路由）",
+  "prepare": "generator.eslbench.prepare_data",
+  "target": [
+    {
+      "type": "theta_api",
+      "fields": {
+        "agent": {
+          "default": "expert",
+          "editable": true,
+          "required": false
+        },
+        "language": {
+          "default": "en",
+          "editable": false
+        }
+      }
+    },
+    {
+      "type": "theta_smart_api",
+      "fields": {
+        "agent": {
+          "default": "expert",
+          "editable": true,
+          "required": false
+        },
+        "language": {
+          "default": "en",
+          "editable": false
+        }
+      }
+    },
+    {
+      "type": "theta_miroflow",
+      "fields": {
+        "email": {
+          "default": null,
+          "editable": false
+        }
+      }
+    },
+    {
+      "type": "llm_api",
+      "fields": {
+        "model": {
+          "default": "gpt-4.1",
+          "editable": true,
+          "required": true
+        },
+        "system_prompt": {
+          "default": "You are a health data assistant with access to a user's health data via tools. IMPORTANT RULES: 1) NEVER guess — only answer from tool evidence. 2) Be concise — return key values/dates/units directly.\n\n## Data Sources\n- **JSON files**: device_data.json (daily indicators), exam_data.json (lab results), profile.json (demographics, family history)\n- **DuckDB tables** (for aggregation/sorting): device_indicators(time,indicator,value,unit), exam_indicators(time,indicator,value,unit). NOTE: DuckDB uses its own SQL dialect (not PostgreSQL). All value columns are VARCHAR — use CAST(value AS DOUBLE) for numeric comparisons, and add WHERE value IS NOT NULL to filter NULL rows. Use ILIKE for fuzzy text match.\n\n## Tool Strategy (priority order)\n1. **lookup_indicator** — For indicator values on specific dates. ALWAYS try this first for indicator questions.\n2. **query_duckdb** — For aggregation (COUNT/SUM/AVG/COUNT DISTINCT), sorting, date ranges, multi-condition filters. ONLY query existing tables — NEVER use read_json_auto or read_csv functions.\n3. **query_json** — For structured JSON queries: filter mode (where_key/where_value) or path mode ($.field[0].sub). Supports offset pagination (has_more/next_offset in response). Avoid jmes unless simple projection.\n4. **read_file** — Read JSON file structure overview (no path) or specific path.\n5. **search_file** — Last resort keyword search across JSON.\n\n## Common Patterns\n- Date-range statistics → query_duckdb with WHERE time::DATE BETWEEN ... AND value IS NOT NULL\n\n## Output Format\nAfter your analysis, ALWAYS end your response with a structured answer line:\nANSWER: <value>\n\nExamples:\n- Numeric: ANSWER: 29\n- Boolean: ANSWER: true\n- List (semicolon-separated): ANSWER: BodyBattery; DailyStressScore; HRV\n- Text: ANSWER: The patient has Type 2 Diabetes diagnosed on 2024-01-15",
+          "editable": true,
+          "required": false
+        },
+        "tool_group": {
+          "default": "eslbench/retrieve",
+          "editable": false
+        },
+        "tool_context": {
+          "default": null,
+          "editable": false
+        }
+      }
+    },
+    {
+      "type": "hippo_rag_api",
+      "fields": {
+        "model": {
+          "default": "gemini-3-flash-preview",
+          "editable": true,
+          "required": true
+        },
+        "data_group": {
+          "default": "eslbench",
+          "editable": false
+        },
+        "user_email": {
+          "default": null,
+          "editable": false
+        },
+        "embedding_model": {
+          "default": "text-embedding-3-large",
+          "editable": true,
+          "required": false
+        },
+        "top_k": {
+          "default": 10,
+          "editable": true,
+          "required": false
+        },
+        "use_graph": {
+          "default": true,
+          "editable": false,
+          "required": false
+        },
+        "openie_model": {
+          "default": "gemini-3-flash-preview",
+          "editable": false,
+          "required": false
+        },
+        "damping": {
+          "default": 0.5,
+          "editable": false,
+          "required": false
+        },
+        "linking_top_k": {
+          "default": 10,
+          "editable": false,
+          "required": false
+        }
+      }
+    },
+    {
+      "type": "dyg_rag_api",
+      "fields": {
+        "model": {
+          "default": "gemini-3-pro-preview",
+          "editable": true,
+          "required": true
+        },
+        "data_group": {
+          "default": "eslbench",
+          "editable": false
+        },
+        "user_email": {
+          "default": null,
+          "editable": false
+        },
+        "top_k": {
+          "default": 20,
+          "editable": true,
+          "required": false
+        },
+        "enable_graph_traversal": {
+          "default": true,
+          "editable": true,
+          "required": false
+        }
+      }
+    }
+  ]
+}

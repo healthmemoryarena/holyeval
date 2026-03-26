@@ -1,0 +1,148 @@
+{# Shared cost estimation utilities — used by benchmarks/index.html, benchmarks/detail.html, tasks/index.html #}
+{# Two-factor model: total estimate = target token cost + eval overhead #}
+{# #}
+{# Cost data sources: #}
+{#   - eval agent est_cost_per_case: from plugin _cost_meta (loaded via API) #}
+{#   - target agent est_input/output_tokens: from plugin _cost_meta (loaded via API) #}
+{#   - token pricing: external data (vendor public pricing), maintained here #}
+<script>
+/* ===== Token pricing (USD / 1M tokens) — external data, vendor public pricing ===== */
+const _estTokenPricing = {
+    'gpt-5.4':                  { input: 2.50, output: 15.00 },
+    'gpt-5.2':                  { input: 1.75, output: 14.00 },
+    'gpt-4.1':                  { input: 2.00, output: 8.00 },
+    'gpt-4.1-mini':             { input: 0.40, output: 1.60 },
+    'gpt-4.1-nano':             { input: 0.10, output: 0.40 },
+    'gemini-3.1-pro-preview':   { input: 2.00, output: 12.00 },
+    'gemini-3.1-flash-lite-preview':    { input: 0.25, output: 1.50 },
+    'gemini-3-pro-preview':     { input: 2.00, output: 12.00 },
+    'gemini-3-flash-preview':   { input: 0.50, output: 3.00 },
+    'anthropic/claude-opus-4.6':   { input: 5.00, output: 25.00 },
+    'anthropic/claude-sonnet-4.6': { input: 3.00, output: 15.00 },
+    'minimax/minimax-m2.5':     { input: 0.30, output: 1.20 },
+    'z-ai/glm-5':              { input: 0.80, output: 2.56 },
+};
+const _estDefaultPricing = { input: 2.00, output: 8.00 };
+
+/* ===== Model display metadata (for dropdown tags) ===== */
+/* price: input price shorthand ($/1M tokens), date: release month */
+const _modelMeta = {
+    'gpt-5.4':                  { price: '2.50', date: '2026-02' },
+    'gpt-5.2':                  { price: '1.75', date: '2025-12' },
+    'gpt-4.1':                  { price: '2.00', date: '2025-04' },
+    'gemini-3.1-pro-preview':   { price: '2.00', date: '2026-02' },
+    'gemini-3.1-flash-lite-preview':    { price: '0.25', date: '2026-02' },
+    'gemini-3-pro-preview':     { price: '2.00', date: '2025-09' },
+    'gemini-3-flash-preview':   { price: '0.50', date: '2025-09' },
+    'anthropic/claude-opus-4.6':   { price: '5.00', date: '2026-02' },
+    'anthropic/claude-sonnet-4.6': { price: '3.00', date: '2026-02' },
+    'minimax/minimax-m2.5':     { price: '0.30', date: '2025-10' },
+    'z-ai/glm-5':              { price: '0.80', date: '2025-08' },
+};
+
+/* ===== Cost parameters dynamically built from plugin _cost_meta (populated by page JS) ===== */
+/* { eval_agent_name: { est_cost_per_case } } */
+const _evalCostMeta = {};
+/* { target_agent_name: { est_input_tokens, est_output_tokens } } */
+const _targetCostMeta = {};
+
+const _estDefaultEvalCost = 0.010;     // default for eval agents without _cost_meta
+const _estSecPerCase = 12;             // average time per case (seconds)
+const _estDefaultConcurrency = 5;      // default concurrency
+
+/**
+ * Initialize cost metadata from API-returned agent lists.
+ * Called at page init with responses from /api/agents/eval and /api/agents/target.
+ */
+function _initCostMeta(evalAgents, targetAgents) {
+    if (evalAgents) {
+        for (const a of evalAgents) {
+            if (a.cost_meta && Object.keys(a.cost_meta).length > 0) {
+                _evalCostMeta[a.name] = a.cost_meta;
+            }
+        }
+    }
+    if (targetAgents) {
+        for (const a of targetAgents) {
+            if (a.cost_meta && Object.keys(a.cost_meta).length > 0) {
+                _targetCostMeta[a.name] = a.cost_meta;
+            }
+        }
+    }
+}
+
+/**
+ * Estimate target single-call cost.
+ * @param {string} targetType - target agent type name
+ * @param {string} model - user-selected model name
+ * @returns {number} USD
+ */
+function _estTargetCallCost(targetType, model) {
+    if (!model) return 0;
+    const meta = _targetCostMeta[targetType];
+    if (!meta) return 0;
+    const inputTokens = meta.est_input_tokens || 0;
+    const outputTokens = meta.est_output_tokens || 0;
+    if (inputTokens === 0 && outputTokens === 0) return 0;
+    const pricing = _estTokenPricing[model] || _estDefaultPricing;
+    return (inputTokens * pricing.input + outputTokens * pricing.output) / 1e6;
+}
+
+/**
+ * Estimate eval cost per case.
+ * @param {string} evaluator - eval agent type name
+ * @returns {number} USD
+ */
+function _estEvalCaseCost(evaluator) {
+    if (!evaluator) return _estDefaultEvalCost;
+    const meta = _evalCostMeta[evaluator];
+    if (meta && meta.est_cost_per_case !== undefined) return meta.est_cost_per_case;
+    return _estDefaultEvalCost;
+}
+
+/**
+ * Estimate total cost per case.
+ * @param {string} targetType - target agent type name
+ * @param {string} model - target model name
+ * @param {string} evaluator - eval agent type name
+ * @returns {number} USD
+ */
+function _estCostPerCase(targetType, model, evaluator) {
+    return _estTargetCallCost(targetType, model) + _estEvalCaseCost(evaluator);
+}
+
+/**
+ * Estimate total cost for N cases.
+ */
+function _estTotalCost(count, targetType, model, evaluator) {
+    return count * _estCostPerCase(targetType, model, evaluator);
+}
+
+/**
+ * Format estimated cost as a string.
+ */
+function _estCostLabel(usd) {
+    if (usd === 0) return '—';
+    if (usd < 0.01) return '<$0.01';
+    if (usd < 1) return '~$' + usd.toFixed(2);
+    if (usd < 100) return '~$' + usd.toFixed(1);
+    return '~$' + Math.round(usd);
+}
+
+/**
+ * Estimate duration in seconds.
+ */
+function _estTime(count, concurrency) {
+    return Math.ceil(count * _estSecPerCase / (concurrency || _estDefaultConcurrency));
+}
+
+/**
+ * Format estimated duration as a string.
+ */
+function _estTimeLabel(count, concurrency) {
+    const s = _estTime(count, concurrency);
+    if (s < 60) return '~' + s + 's';
+    if (s < 3600) return '~' + Math.ceil(s / 60) + 'min';
+    return '~' + (s / 3600).toFixed(1) + 'h';
+}
+</script>

@@ -1,0 +1,162 @@
+{# Shared case detail partial — used by tasks/detail.html and reports/detail.html
+   Caller must ensure Alpine scope has: caseData (case report object) and mixin methods mounted #}
+
+<!-- Eval summary bar -->
+<div class="flex flex-wrap items-center gap-x-5 gap-y-1">
+    <div class="text-xs"><span class="text-muted-foreground">Score</span> <span class="font-semibold ml-1" x-text="caseData?.eval?.score?.toFixed(2) ?? '-'"></span></div>
+    <div class="text-xs"><span class="text-muted-foreground">Result</span>
+        <span class="font-semibold ml-1"
+              :class="caseData?.eval?.result === 'pass' ? 'text-green-600 dark:text-green-400' : caseData?.eval?.result === 'fail' ? 'text-red-500' : 'text-blue-600 dark:text-blue-400'"
+              x-text="caseData?.eval?.result ?? '-'"></span>
+    </div>
+    <div class="text-xs" x-show="caseData?.start"><span class="text-muted-foreground">Duration</span> <span class="font-medium ml-1" x-text="calcDuration(caseData)"></span></div>
+    <div class="text-xs" x-show="caseData?.cost"><span class="text-muted-foreground">Cost</span> <span class="font-medium ml-1" x-text="caseCostLabel(caseData)"></span></div>
+</div>
+
+<!-- Agent Config -->
+<div x-show="caseData?.target_config || caseData?.eval_config">
+    <div class="text-xs font-medium text-muted-foreground mb-1.5">Agent Config</div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <!-- Target Config -->
+        <div x-show="caseData?.target_config && _configEntries(caseData.target_config).length > 0"
+             class="rounded-lg bg-card border border-border px-3 py-2.5">
+            <div class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5"
+                 x-text="'Target · ' + (caseData?.target_type || '')"></div>
+            <div class="space-y-1">
+                <template x-for="[k, v] in _configEntries(caseData.target_config)" :key="k">
+                    <div class="flex items-baseline justify-between gap-2 text-xs">
+                        <span class="text-muted-foreground shrink-0" x-text="k"></span>
+                        <span class="font-mono font-medium truncate text-right max-w-[60%]" :title="_formatCfgVal(v)" x-text="_formatCfgVal(v)"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+        <!-- Eval Config -->
+        <div x-show="caseData?.eval_config && _configEntries(caseData.eval_config).length > 0"
+             class="rounded-lg bg-card border border-border px-3 py-2.5">
+            <div class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5"
+                 x-text="'Eval · ' + (caseData?.eval_type || '')"></div>
+            <div class="space-y-1">
+                <template x-for="[k, v] in _configEntries(caseData.eval_config)" :key="k">
+                    <div class="flex items-baseline justify-between gap-2 text-xs">
+                        <span class="text-muted-foreground shrink-0" x-text="k"></span>
+                        <span class="font-mono font-medium truncate text-right max-w-[60%]" :title="_formatCfgVal(v)" x-text="_formatCfgVal(v)"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cost breakdown table -->
+<div x-show="caseData?.cost && _caseCostRows(caseData).length > 0">
+    <div class="text-xs font-medium text-muted-foreground mb-1.5">Cost Breakdown</div>
+    <div class="rounded-lg bg-card border border-border overflow-hidden">
+        <table class="w-full text-xs">
+            <thead>
+                <tr class="border-b border-border bg-muted/30">
+                    <th class="px-3 py-1.5 text-left font-medium text-muted-foreground">Role</th>
+                    <th class="px-3 py-1.5 text-left font-medium text-muted-foreground">Model</th>
+                    <th class="px-3 py-1.5 text-right font-medium text-muted-foreground">Input</th>
+                    <th class="px-3 py-1.5 text-right font-medium text-muted-foreground">Output</th>
+                    <th class="px-3 py-1.5 text-right font-medium text-muted-foreground">Cost</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-border/50">
+                <template x-for="row in _caseCostRows(caseData)" :key="row.role + row.model">
+                    <tr>
+                        <td class="px-3 py-1.5" x-text="row.role"></td>
+                        <td class="px-3 py-1.5 font-mono text-muted-foreground" x-text="row.model"></td>
+                        <td class="px-3 py-1.5 text-right tabular-nums" x-text="row.input.toLocaleString()"></td>
+                        <td class="px-3 py-1.5 text-right tabular-nums" x-text="row.output.toLocaleString()"></td>
+                        <td class="px-3 py-1.5 text-right tabular-nums font-medium" x-text="row.costLabel"></td>
+                    </tr>
+                </template>
+            </tbody>
+            <tfoot>
+                <tr class="border-t border-border bg-muted/30 font-medium">
+                    <td class="px-3 py-1.5" colspan="2">Total</td>
+                    <td class="px-3 py-1.5 text-right tabular-nums" x-text="_caseCostTotalTokens(caseData, 'input').toLocaleString()"></td>
+                    <td class="px-3 py-1.5 text-right tabular-nums" x-text="_caseCostTotalTokens(caseData, 'output').toLocaleString()"></td>
+                    <td class="px-3 py-1.5 text-right tabular-nums" x-text="caseCostLabel(caseData)"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<!-- Feedback -->
+<div x-show="caseData?.eval?.feedback">
+    <div class="text-xs font-medium text-muted-foreground mb-1.5">Evaluation Feedback</div>
+    <div class="rounded-lg bg-card border border-border px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap"
+         x-text="caseData?.eval?.feedback"></div>
+</div>
+
+<!-- Dialogue -->
+<div x-show="getCaseDialogue(caseData).length > 0">
+    <div class="text-xs font-medium text-muted-foreground mb-2">Dialogue</div>
+    <div class="space-y-2.5">
+        <template x-for="(msg, mi) in getCaseDialogue(caseData)" :key="mi">
+            <div>
+                <!-- Divider between history and evaluation dialogue -->
+                <div x-show="!msg.isHistory && mi > 0 && getCaseDialogue(caseData)[mi - 1]?.isHistory"
+                     class="flex items-center gap-3 my-3">
+                    <div class="flex-1 border-t border-dashed border-border"></div>
+                    <span class="text-[10px] text-muted-foreground shrink-0">History above</span>
+                    <div class="flex-1 border-t border-dashed border-border"></div>
+                </div>
+                <div class="flex gap-3" :class="msg.isHistory ? 'opacity-60' : ''">
+                    <div class="shrink-0 mt-0.5">
+                        <span x-show="msg.role === 'user'" class="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold"
+                              :class="msg.isHistory ? 'bg-blue-50 text-blue-400 border border-dashed border-blue-300 dark:bg-blue-950/20 dark:text-blue-500 dark:border-blue-800' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300'">U</span>
+                        <span x-show="msg.role === 'target'" class="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold"
+                              :class="msg.isHistory ? 'bg-emerald-50 text-emerald-400 border border-dashed border-emerald-300 dark:bg-emerald-950/20 dark:text-emerald-500 dark:border-emerald-800' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300'">T</span>
+                    </div>
+                    <div class="flex-1 min-w-0 rounded-lg px-4 py-2.5 text-sm leading-relaxed"
+                         :class="msg.role === 'user'
+                             ? (msg.isHistory ? 'bg-blue-50/50 dark:bg-blue-950/15 border border-dashed border-blue-200 dark:border-blue-900/60' : 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900')
+                             : (msg.isHistory ? 'bg-card/50 border border-dashed border-border' : 'bg-card border border-border')">
+                        <!-- Tool Calls (collapsible) -->
+                        <template x-if="msg.tool_calls && msg.tool_calls.length > 0">
+                            <div x-data="{ showTools: false }" class="mb-2">
+                                <button @click="showTools = !showTools"
+                                        class="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17l-5.25-5.25m0 0l5.25-5.25m-5.25 5.25h12"/>
+                                    </svg>
+                                    <span x-text="(showTools ? 'Hide' : 'Show') + ' ' + msg.tool_calls.length + ' tool call' + (msg.tool_calls.length > 1 ? 's' : '')"></span>
+                                </button>
+                                <div x-show="showTools" x-transition class="mt-1.5 space-y-1.5">
+                                    <template x-for="(tc, ti) in msg.tool_calls" :key="ti">
+                                        <div class="rounded border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2 text-xs">
+                                            <div class="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-medium">
+                                                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75a4.5 4.5 0 01-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 11-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 016.336-4.486l-3.276 3.276a3.004 3.004 0 002.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.852z"/>
+                                                </svg>
+                                                <span x-text="tc.name"></span>
+                                                <span class="text-amber-500/60 dark:text-amber-500/40 font-normal" x-text="Object.keys(tc.args || {}).length ? '(' + JSON.stringify(tc.args) + ')' : '()'"></span>
+                                            </div>
+                                            <div x-show="tc.result" class="mt-1 text-muted-foreground whitespace-pre-wrap break-all max-h-32 overflow-y-auto" x-text="tc.result?.substring(0, 2000) + (tc.result?.length > 2000 ? '...' : '')"></div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                        <div class="whitespace-pre-wrap break-words" x-text="msg.content"></div>
+                        <div x-show="msg.time" class="text-[10px] text-muted-foreground mt-1.5" x-text="msg.time"></div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</div>
+
+<!-- Raw JSON -->
+<div x-data="{ showRaw: false }">
+    <button @click="showRaw = !showRaw" class="agent-detail-toggle">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/></svg>
+        <span x-text="showRaw ? 'Hide JSON' : 'View Raw Data'"></span>
+    </button>
+    <pre x-show="showRaw" x-transition class="code-block text-xs whitespace-pre-wrap max-h-96 overflow-y-auto mt-2"
+         x-text="JSON.stringify(caseData, null, 2)"></pre>
+</div>

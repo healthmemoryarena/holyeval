@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Agent Registry - HolyEval{% endblock %}
+
+{% block content %}
+<div x-data="agentRegistry()" x-init="init()">
+    <div class="mb-6">
+        <h1 class="text-2xl font-semibold tracking-tight">Agent Registry</h1>
+        <p class="text-sm text-muted-foreground mt-1">View registered agents, all info derived from code</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex border-b mb-6">
+        <button @click="tab = 'target'"
+                :class="tab === 'target' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+                class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
+            Target
+            <span class="ml-1 badge badge-secondary text-xs" x-text="targetAgents.length"></span>
+        </button>
+        <button @click="tab = 'eval'"
+                :class="tab === 'eval' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+                class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
+            Evaluator
+            <span class="ml-1 badge badge-secondary text-xs" x-text="evalAgents.length"></span>
+        </button>
+        <button @click="tab = 'test'"
+                :class="tab === 'test' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+                class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
+            Test Agent
+            <span class="ml-1 badge badge-secondary text-xs" x-text="testAgents.length"></span>
+        </button>
+    </div>
+
+    <!-- Agent cards -->
+    <div class="grid grid-cols-1 gap-4">
+        <template x-for="agent in currentAgents" :key="agent.name">
+            <div class="rounded-lg border bg-card card-hover" x-data="{ showSchema: false, showExamples: false }">
+                <div class="p-6">
+                    <!-- Header -->
+                    <div class="flex items-center gap-3 mb-3">
+                        <span class="badge badge-default" x-text="agent.name"></span>
+                        <span class="text-sm text-muted-foreground font-mono" x-text="agent.class_name"></span>
+                    </div>
+
+                    <!-- Description (module docstring) -->
+                    <div class="text-sm text-muted-foreground mb-4 whitespace-pre-line leading-relaxed"
+                         x-text="agent.module_doc.split('\n').slice(0, 8).join('\n')">
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div class="flex gap-2">
+                        <button @click="showSchema = !showSchema"
+                                class="h-8 px-3 rounded-md border text-xs font-medium hover:bg-secondary transition-colors"
+                                :class="showSchema && 'bg-secondary'">
+                            Config Schema
+                        </button>
+                        <button @click="showExamples = !showExamples"
+                                x-show="agent.config_examples.length > 0"
+                                class="h-8 px-3 rounded-md border text-xs font-medium hover:bg-secondary transition-colors"
+                                :class="showExamples && 'bg-secondary'">
+                            Config Example
+                        </button>
+                    </div>
+
+                    <!-- Schema section -->
+                    <div x-show="showSchema" x-transition class="mt-4">
+                        <div class="border rounded-md overflow-hidden">
+                            <table class="w-full text-sm" x-show="agent.config_schema.properties">
+                                <thead>
+                                    <tr class="bg-muted/50 border-b">
+                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">Field</th>
+                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">Type</th>
+                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">Required</th>
+                                        <th class="text-left px-3 py-2 font-medium text-muted-foreground">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    <template x-for="[key, prop] in Object.entries(agent.config_schema.properties || {})" :key="key">
+                                        <tr class="table-row-hover">
+                                            <td class="px-3 py-2 font-mono text-xs" x-text="key"></td>
+                                            <td class="px-3 py-2 text-xs text-muted-foreground"
+                                                x-text="prop.type || prop.anyOf?.map(a => a.type).join(' | ') || 'object'"></td>
+                                            <td class="px-3 py-2 text-xs"
+                                                x-text="(agent.config_schema.required || []).includes(key) ? 'Yes' : ''"></td>
+                                            <td class="px-3 py-2 text-xs text-muted-foreground" x-text="prop.description || prop.title || ''"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Examples section -->
+                    <div x-show="showExamples" x-transition class="mt-4">
+                        <template x-for="(example, i) in agent.config_examples" :key="i">
+                            <pre class="code-block text-xs whitespace-pre-wrap mb-2" x-text="JSON.stringify(example, null, 2)"></pre>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function agentRegistry() {
+    return {
+        tab: 'target',
+        targetAgents: [],
+        evalAgents: [],
+        testAgents: [],
+
+        get currentAgents() {
+            if (this.tab === 'target') return this.targetAgents;
+            if (this.tab === 'eval') return this.evalAgents;
+            return this.testAgents;
+        },
+
+        async init() {
+            const [targetRes, evalRes, testRes] = await Promise.all([
+                fetch('/api/agents/target'),
+                fetch('/api/agents/eval'),
+                fetch('/api/agents/test'),
+            ]);
+            this.targetAgents = await targetRes.json();
+            this.evalAgents = await evalRes.json();
+            this.testAgents = await testRes.json();
+        }
+    };
+}
+</script>
+{% endblock %}
