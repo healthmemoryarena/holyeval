@@ -97,7 +97,6 @@ generator/memoryarena/
 evaluator/tests/
 benchmark/tests/
 web/tests/
-benchmark/data/eslbench/tools/
 generator/medcalc/data/
 docs/ablation_*
 docs/batch_*

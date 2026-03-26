@@ -43,37 +43,25 @@ Built from the ground up as a [Claude Code](https://docs.anthropic.com/en/docs/c
   <img src="docs/screenshots/holyeval_add_benchmark.gif" alt="Add Benchmark Demo" width="80%">
 </p>
 
-```
-You:  /add-benchmark
-      Paper: https://arxiv.org/abs/2505.07469
-      HealthBench — OpenAI's medical AI evaluation benchmark.
-
-Claude: Reading the paper and source repo...
-        ✓ Found: JSONL with multi-turn prompts + rubric criteria
-        ✓ Generating converter, datasets, and metadata
-        ✓ Validation passed — benchmark ready!
-
-You:  uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 3
-      # Running... 3 cases → report saved
-```
-
-> **From paper to scored report in one conversation.** No boilerplate, no manual file creation, no debugging import paths.
+> **From paper to scored report in one conversation.** Paste a link, Claude Code reads the paper, writes the converter, creates datasets, validates — done. No boilerplate, no manual file creation.
 
 ### Run any benchmark with one command
 
+<p align="center">
+  <img src="docs/screenshots/holyeval_run_benchmark.gif" alt="Run Benchmark Demo" width="80%">
+</p>
+
 ```bash
 # Try it out — each command costs < $0.05 with --limit 3
-uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 3
-uv run python -m benchmark.basic_runner medcalc sample --target-model gpt-4.1 --limit 3
+uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-5.4-mini --limit 3
+uv run python -m benchmark.basic_runner medcalc sample --target-model gpt-5.4-mini --limit 3
 uv run python -m benchmark.basic_runner memoryarena sample --target-model gemini-3-pro --limit 3
 
 # ESLBench requires data preparation first (see Quick Start below)
-uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1 --limit 3
+uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-5.4-mini --limit 3
 
 # Ready for a full run? Remove --limit to run the entire dataset
 ```
-
-Start small with `--limit`, then scale up when you're ready.
 
 ## Why HolyEval?
 
@@ -89,69 +77,25 @@ Start small with `--limit`, then scale up when you're ready.
 
 ## Quick Start
 
-### Option A: AI-guided setup (recommended)
+With [Claude Code](https://docs.anthropic.com/en/docs/claude-code): just run `/quick-start` — it handles everything automatically.
 
-Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code), then:
-
-```
-/quick-start
-```
-
-Claude Code will check your environment, install dependencies, walk you through API key configuration, and launch the Web UI. No manual steps needed.
-
-### Option B: Manual setup
-
-**Prerequisites:** Python 3.11+, [uv](https://docs.astral.sh/uv/) package manager, at least one LLM API key (OpenAI or Google Gemini).
+Or manually:
 
 ```bash
-git clone https://github.com/healthmemoryarena/holyeval.git
-cd holyeval
+git clone https://github.com/healthmemoryarena/holyeval.git && cd holyeval
 uv sync
+cp .env.example .env                    # add your OPENAI_API_KEY or GOOGLE_API_KEY
 
-cp .env.example .env
-# Edit .env — add your OPENAI_API_KEY or GOOGLE_API_KEY
+# Run your first benchmark (< $0.02)
+uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-5.4-mini --limit 2
+
+# Launch Web UI
+uv run python -m web                    # http://localhost:8000
 ```
 
-### Prepare benchmark data
-
-Some benchmarks (like ESLBench) require downloading external data before running. This step is **automatic** when using the Web UI, but needs to be run manually for CLI usage:
-
-```bash
-# ESLBench: download synthetic health KG data from HuggingFace + build per-user DuckDB indexes
-# Requires HF_TOKEN in .env (get one at https://huggingface.co/settings/tokens)
-uv run python -m generator.eslbench.prepare_data
-
-# Force rebuild (re-download + rebuild DuckDB)
-uv run python -m generator.eslbench.prepare_data --force
-```
-
-Other benchmarks (HealthBench, MedCalc, MemoryArena, etc.) ship with data included — no preparation needed.
-
-### Run your first benchmark
-
-<p align="center">
-  <img src="docs/screenshots/holyeval_run_benchmark.gif" alt="Run Benchmark Demo" width="80%">
-</p>
-
-```bash
-# Quick smoke test: 2 cases, just to verify everything works (< $0.02)
-uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 2
-
-# Scale up gradually
-uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 20 -p 3
-
-# Full dataset (100 cases — review cost before running)
-uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1
-
-# Resume if interrupted
-uv run python -m benchmark.basic_runner healthbench sample --resume
-```
-
-### Launch Web UI
-
-```bash
-uv run python -m web    # http://localhost:8000
-```
+> **Prerequisites:** Python 3.11+, [uv](https://docs.astral.sh/uv/), at least one LLM API key (OpenAI or Google Gemini).
+>
+> **ESLBench data prep:** ESLBench requires downloading data from HuggingFace first — run `uv run python -m generator.eslbench.prepare_data` (automatic via Web UI). Other benchmarks ship with data included.
 
 ## AI-Native Development with Claude Code
 
@@ -178,7 +122,7 @@ HolyEval is designed to be operated entirely through [Claude Code](https://docs.
 > /run-benchmark
 # Claude asks: which benchmark? → healthbench
 # Which dataset? → sample
-# Which model? → gpt-4.1
+# Which model? → gpt-5.4-mini
 # How many cases? → 5 (start small!)
 # Running... 5 cases → report saved
 ```
@@ -326,13 +270,13 @@ ESLBench evaluates an LLM's ability to answer health questions using structured 
 uv run python -m generator.eslbench.prepare_data
 
 # Quick test: 3 cases to verify setup (< $0.05)
-uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1 --limit 3
+uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-5.4-mini --limit 3
 
 # Sample dataset (50 cases)
-uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1
+uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-5.4-mini
 
 # Full benchmark (1800 cases — significant API cost, review before running)
-uv run python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-4.1 -p 5
+uv run python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-5.4-mini -p 5
 ```
 
 The LLM target is equipped with a tool group (`eslbench/retrieve`) that provides JSON file reading, DuckDB queries, and indicator lookup — the LLM must use these tools to find answers in the user's health data.
@@ -349,7 +293,7 @@ Two ways:
 **B) Manual:**
 1. Create `benchmark/data/<name>/metadata.json` with target config
 2. Create `benchmark/data/<name>/<dataset>.jsonl` in BenchItem format
-3. Run: `uv run python -m benchmark.basic_runner <name> <dataset> --target-model gpt-4.1`
+3. Run: `uv run python -m benchmark.basic_runner <name> <dataset> --target-model gpt-5.4-mini`
 
 See [benchmark/data/history_demo/](benchmark/data/history_demo/) for a minimal example.
 
@@ -391,7 +335,7 @@ uv run python -m generator.eslbench.prepare_data --force   # force rebuild
 
 # Run benchmark
 uv run python -m benchmark.basic_runner <benchmark> <dataset> [options]
-  --target-model MODEL    # LLM model to evaluate (e.g., gpt-4.1, gemini-3-pro)
+  --target-model MODEL    # LLM model to evaluate (e.g., gpt-5.4-mini, gemini-3-pro)
   --target-type TYPE      # Target agent type (for multi-target benchmarks)
   --limit N               # Max cases to run
   --ids id1,id2           # Run specific case IDs
@@ -400,7 +344,7 @@ uv run python -m benchmark.basic_runner <benchmark> <dataset> [options]
   --resume                # Resume from last checkpoint
 
 # Convert external datasets
-uv run python -m generator.healthbench.converter input.jsonl output.jsonl --target-model gpt-4.1
+uv run python -m generator.healthbench.converter input.jsonl output.jsonl --target-model gpt-5.4-mini
 uv run python -m generator.medcalc.converter
 uv run python -m generator.agentclinic.converter input.jsonl output.jsonl
 uv run python -m generator.memoryarena.converter
@@ -428,7 +372,7 @@ Environment variables (in `.env`):
 
 ### Planned
 - [ ] **Eval-driven optimization loop** — run benchmark → auto-analyze failure patterns → generate targeted prompt/system improvements → re-run to verify. Close the loop between evaluation and iteration
-- [ ] **CI/CD integration** — `pip install holyeval` + `holyeval.run("healthbench", model="gpt-4.1")` as a one-liner in your CI pipeline. Regression detection across runs, alerting on score drops before deployment
+- [ ] **CI/CD integration** — `pip install holyeval` + `holyeval.run("healthbench", model="gpt-5.4-mini")` as a one-liner in your CI pipeline. Regression detection across runs, alerting on score drops before deployment
 - [ ] **Industry agent & app deep evaluation** — comprehensive evaluation reports for mainstream AI agents and health apps (e.g. ChatGPT, Gemini, health assistants). Standardized scoring across safety, accuracy, and user experience, published as reproducible community benchmarks
 
 ## Development
