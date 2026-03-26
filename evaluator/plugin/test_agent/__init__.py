@@ -1,11 +1,15 @@
 """test_agent — Test agent (virtual user) plugins implementing AbstractTestAgent
 
-Importing this module triggers subclass registration (__init_subclass__), enabling test agents to be looked up by name:
-    AbstractTestAgent.get("auto")    -> AutoTestAgent   (LLM-driven)
-    AbstractTestAgent.get("manual")  -> ManualTestAgent  (script-driven)
+Auto-imports all *_test_agent.py modules in this directory to trigger
+__init_subclass__ registration. Missing or broken plugins are silently skipped.
 """
 
-from evaluator.plugin.test_agent.auto_test_agent import AutoTestAgent
-from evaluator.plugin.test_agent.manual_test_agent import ManualTestAgent
+import importlib
+import pkgutil
 
-__all__ = ["AutoTestAgent", "ManualTestAgent"]
+for _info in pkgutil.iter_modules(__path__):
+    if _info.name.endswith("_test_agent"):
+        try:
+            importlib.import_module(f"{__name__}.{_info.name}")
+        except ImportError:
+            pass
