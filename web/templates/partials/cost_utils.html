@@ -1,32 +1,6 @@
 {# Shared cost calculation utilities — used by tasks/detail.html and reports/detail.html #}
+{% include "partials/cost_pricing.html" %}
 <script>
-/* Token pricing (USD / 1M tokens) — updated 2026-02
-   cached_input: price for cache-hit input tokens
-   Sources: openai.com/api/pricing, ai.google.dev/gemini-api/docs/pricing,
-            anthropic.com/claude/sonnet, openrouter.ai */
-const _tokenPricing = {
-    // OpenAI — Flagship
-    'gpt-5.4':                  { input: 2.50, cached_input: 0.25, output: 15.00 },
-    'gpt-5.2':                  { input: 1.75, cached_input: 0.175, output: 14.00 },
-    'gpt-5-mini':               { input: 0.25, cached_input: 0.025, output: 2.00 },
-    // OpenAI — GPT-4.1 series
-    'gpt-4.1':                  { input: 3.00, cached_input: 0.75, output: 12.00 },
-    'gpt-4.1-mini':             { input: 0.80, cached_input: 0.20, output: 3.20 },
-    'gpt-4.1-nano':             { input: 0.20, cached_input: 0.05, output: 0.80 },
-    // Google Gemini 3.1
-    'gemini-3.1-pro-preview':   { input: 2.00, cached_input: 0.20, output: 12.00 },
-    'gemini-3.1-flash-lite-preview':    { input: 0.25, cached_input: 0.025, output: 1.50 },
-    // Google Gemini 3
-    'gemini-3-pro-preview':     { input: 2.00, cached_input: 0.20, output: 12.00 },
-    'gemini-3-flash-preview':   { input: 0.50, cached_input: 0.05, output: 3.00 },
-    // Anthropic (via OpenRouter)
-    'anthropic/claude-opus-4.6':   { input: 5.00, cached_input: 0.50, output: 25.00 },
-    'anthropic/claude-sonnet-4.6': { input: 3.00, cached_input: 0.30, output: 15.00 },
-    // Zhipu (via OpenRouter)
-    'z-ai/glm-5':              { input: 0.80, cached_input: 0.40, output: 2.56 },
-};
-const _defaultPricing = { input: 2.00, cached_input: 0.50, output: 8.00 };
-
 function _calcUsageCost(usageDict) {
     /* Calculate USD cost from {model: {input_tokens, output_tokens, input_token_details?}}
        input_token_details.cache_read uses discounted rate, rest uses full price */
