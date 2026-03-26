@@ -236,13 +236,8 @@ def create_user_duckdb(user_dir: Path, *, force: bool = False) -> None:
             interrupted BOOLEAN, interruption_date DATE
         )
     """)
-    con.execute("""
-        CREATE TABLE event_indicators (
-            user_id VARCHAR, event_name VARCHAR, start_date DATE,
-            indicator_name VARCHAR, indicator_key VARCHAR,
-            expected_change VARCHAR, impact_level VARCHAR
-        )
-    """)
+    # event_indicators 表已移除：含 expected_change/impact_level，会泄露 Explanation 题答案
+    # evaluation_queries 表已移除：答案库不应写入 DuckDB，避免被 query_duckdb 直接读取
 
     # 加载 timeline（自动查找 *_timeline.json）
     tl_path = find_timeline(user_dir)
@@ -324,56 +319,15 @@ def create_user_duckdb(user_dir: Path, *, force: bool = False) -> None:
             event_rows,
         )
 
-    # 加载 event_indicators（从 events.json 展平 affected_indicators）
-    events_json_path = user_dir / "events.json"
-    if events_json_path.exists():
-        with open(events_json_path, encoding="utf-8") as f:
-            events_data = json.load(f)
-
-        ei_rows = []
-        if isinstance(events_data, list):
-            for ev in events_data:
-                if not isinstance(ev, dict):
-                    continue
-                ev_name = ev.get("event_name", "")
-                ev_start = ev.get("start_date")
-                for ai in ev.get("affected_indicators", []):
-                    if not isinstance(ai, dict):
-                        continue
-                    ei_rows.append(
-                        {
-                            "user_id": email,
-                            "event_name": ev_name,
-                            "start_date": ev_start,
-                            "indicator_name": ai.get("indicator_name", ""),
-                            "indicator_key": ai.get("indicator_key", ""),
-                            "expected_change": ai.get("expected_change"),
-                            "impact_level": ai.get("impact_level"),
-                        }
-                    )
-
-        bulk_insert_ndjson(
-            con,
-            "event_indicators",
-            [
-                "user_id",
-                "event_name",
-                "start_date::DATE AS start_date",
-                "indicator_name",
-                "indicator_key",
-                "expected_change",
-                "impact_level",
-            ],
-            ei_rows,
-        )
+    # event_indicators 已移除，不写入 DuckDB（含 expected_change 会泄题）
+    # evaluation_queries 已移除，不写入 DuckDB
 
     # 创建索引
     con.execute("CREATE INDEX idx_device_time ON device_indicators (user_id, time)")
     con.execute("CREATE INDEX idx_device_ind ON device_indicators (indicator)")
     con.execute("CREATE INDEX idx_exam_time ON exam_indicators (user_id, time)")
     con.execute("CREATE INDEX idx_event_user ON events (user_id)")
-    con.execute("CREATE INDEX idx_ei_event ON event_indicators (event_name)")
-    con.execute("CREATE INDEX idx_ei_indicator ON event_indicators (indicator_key)")
+    # event_indicators 索引已随表移除
 
     con.close()
 
