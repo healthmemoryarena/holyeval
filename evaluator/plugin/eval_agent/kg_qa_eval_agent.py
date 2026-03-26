@@ -525,10 +525,14 @@ class KgQaEvalAgent(AbstractEvalAgent, name="kg_qa", params_model=KgQaEvalInfo):
         elif matched > 0:
             score = matched / len(std_floats)
             detail = f"Number match {matched}/{len(std_floats)} — partially correct [{data_status}]"
-        else:
-            # Found data but wrong answer -> 0.2 partial score (distinguish from not found)
+        elif gen_floats:
+            # Agent returned numbers but none matched -> 0.2 format credit
             score = 0.2
-            detail = f"Number match 0/{len(std_floats)} — found data but answer mismatch [{data_status}, wrong_answer]"
+            detail = f"Number match 0/{len(std_floats)} — wrong numeric answer [{data_status}, wrong_answer]"
+        else:
+            # Agent returned no numbers at all (e.g. true/false, text) -> 0.0
+            score = 0.0
+            detail = f"Number match 0/{len(std_floats)} — no numeric answer provided [{data_status}, no_number]"
         return score, detail
 
     # ----------------------------------------------------------

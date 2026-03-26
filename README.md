@@ -37,27 +37,50 @@ HolyEval is an AI-native, open-source evaluation framework for large language mo
 
 Built from the ground up as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) native project — every workflow, from initial setup to integrating a new benchmark from a research paper, is an interactive slash command. You describe what you want in natural language, and Claude Code handles the rest. **You don't need to write a single line of code to use or extend this framework.**
 
-```bash
-# ESLBench — synthetic health KG Q&A, 1800 cases across 5 difficulty levels
-python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1
+### Integrate any benchmark — just paste the paper link
 
-# HealthBench (medical AI, 100 cases)
-python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1
+<p align="center">
+  <img src="docs/screenshots/holyeval_add_benchmark.gif" alt="Add Benchmark Demo" width="80%">
+</p>
 
-# MedCalc-Bench (medical calculations)
-python -m benchmark.basic_runner medcalc sample --target-model gpt-4.1
+```
+You:  /add-benchmark
+      Paper: https://arxiv.org/abs/2505.07469
+      HealthBench — OpenAI's medical AI evaluation benchmark.
 
-# MemoryArena (agent memory, 701 cases)
-python -m benchmark.basic_runner memoryarena full --target-model gemini-3-pro
+Claude: Reading the paper and source repo...
+        ✓ Found: JSONL with multi-turn prompts + rubric criteria
+        ✓ Generating converter, datasets, and metadata
+        ✓ Validation passed — benchmark ready!
+
+You:  uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 3
+      # Running... 3 cases → report saved
 ```
 
-Each benchmark is a published paper you can reproduce in one line.
+> **From paper to scored report in one conversation.** No boilerplate, no manual file creation, no debugging import paths.
+
+### Run any benchmark with one command
+
+```bash
+# Try it out — each command costs < $0.05 with --limit 3
+uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 3
+uv run python -m benchmark.basic_runner medcalc sample --target-model gpt-4.1 --limit 3
+uv run python -m benchmark.basic_runner memoryarena sample --target-model gemini-3-pro --limit 3
+
+# ESLBench requires data preparation first (see Quick Start below)
+uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1 --limit 3
+
+# Ready for a full run? Remove --limit to run the entire dataset
+```
+
+Start small with `--limit`, then scale up when you're ready.
 
 ## Why HolyEval?
 
 | | |
 |---|---|
-| **One-command reproduction** | Integrate a published benchmark once, reproduce it forever with a single CLI command |
+| **Paper → benchmark in one conversation** | Paste a paper link, Claude Code reads it, writes the converter, creates datasets, validates — done |
+| **One-command reproduction** | Reproduce any integrated benchmark forever with a single CLI command |
 | **Pluggable architecture** | Three agent types (TestAgent, TargetAgent, EvalAgent) — extend any of them with a single class |
 | **Multi-turn dialogue** | Simulates real user conversations, not just single-turn Q&A |
 | **Batch execution** | Concurrent runs with real-time progress, cancellation, and checkpoint resume |
@@ -96,10 +119,10 @@ Some benchmarks (like ESLBench) require downloading external data before running
 ```bash
 # ESLBench: download synthetic health KG data from HuggingFace + build per-user DuckDB indexes
 # Requires HF_TOKEN in .env (get one at https://huggingface.co/settings/tokens)
-python -m generator.eslbench.prepare_data
+uv run python -m generator.eslbench.prepare_data
 
 # Force rebuild (re-download + rebuild DuckDB)
-python -m generator.eslbench.prepare_data --force
+uv run python -m generator.eslbench.prepare_data --force
 ```
 
 Other benchmarks (HealthBench, MedCalc, MemoryArena, etc.) ship with data included — no preparation needed.
@@ -111,20 +134,23 @@ Other benchmarks (HealthBench, MedCalc, MemoryArena, etc.) ship with data includ
 </p>
 
 ```bash
-# Quick smoke test: 10 HealthBench cases, 3 concurrent
-python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 10 -p 3
+# Quick smoke test: 2 cases, just to verify everything works (< $0.02)
+uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 2
 
-# Full run
-python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1
+# Scale up gradually
+uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 20 -p 3
+
+# Full dataset (100 cases — review cost before running)
+uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1
 
 # Resume if interrupted
-python -m benchmark.basic_runner healthbench sample --resume
+uv run python -m benchmark.basic_runner healthbench sample --resume
 ```
 
 ### Launch Web UI
 
 ```bash
-python -m web    # http://localhost:8000
+uv run python -m web    # http://localhost:8000
 ```
 
 ## AI-Native Development with Claude Code
@@ -145,46 +171,7 @@ HolyEval is designed to be operated entirely through [Claude Code](https://docs.
 | **Run end-to-end tests** | `/run-e2e-test` | Verifies all components (TestAgent ↔ TargetAgent ↔ EvalAgent ↔ Orchestrator) work together |
 | **Audit architecture** | `/review-architecture` | Checks GitOps compliance, plugin isolation, shared-layer reuse. Reports violations with fix suggestions |
 
-### Example: Integrating HealthBench from a Research Paper
-
-This is a real example of how Claude Code integrates a published benchmark into HolyEval — end-to-end, from paper to runnable evaluation:
-
-<p align="center">
-  <img src="docs/screenshots/holyeval_add_benchmark.gif" alt="Add Benchmark Demo" width="80%">
-</p>
-
-```
-You:  /add-benchmark
-
-      Paper: https://arxiv.org/abs/2505.07469
-      HealthBench is OpenAI's medical AI evaluation benchmark with 5,000+
-      rubric-graded questions across safety, reasoning, and instruction following.
-
-Claude: I'll read the paper and source repo to understand the data format...
-        ✓ Found: JSONL with multi-turn prompts + rubric criteria
-        ✓ Evaluation method: per-rubric LLM-as-Judge grading
-
-        Generating converter: generator/healthbench/converter.py
-        - Maps prompt → history + strict_inputs
-        - Maps rubrics → eval.rubrics (criterion + points)
-        - Sets user.type = "manual", target.type = "llm_api"
-
-        Generating dataset: benchmark/data/healthbench/
-        - metadata.json (target config + description)
-        - sample.jsonl (100 cases, stratified sampling)
-        - full.jsonl (5,000+ cases)
-        - hard.jsonl / consensus.jsonl (subsets)
-
-        Running validation: 3 cases with gpt-4.1...
-        ✓ All 3 passed — benchmark ready!
-
-You:  python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1
-      # Running... 100 cases → report saved
-```
-
-> **The entire integration — reading the paper, writing the converter, creating datasets, validating — takes one conversation.** No boilerplate, no manual file creation, no debugging import paths.
-
-### More Workflow Examples
+### Workflow Examples
 
 **"I want to reproduce HealthBench on GPT-4.1"**
 ```
@@ -192,7 +179,8 @@ You:  python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1
 # Claude asks: which benchmark? → healthbench
 # Which dataset? → sample
 # Which model? → gpt-4.1
-# Running... 100 cases, 5 concurrent → report saved
+# How many cases? → 5 (start small!)
+# Running... 5 cases → report saved
 ```
 
 **"I need a custom evaluator that checks citation accuracy"**
@@ -208,7 +196,7 @@ You:  python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1
 
 ## Web UI
 
-Launch with `python -m web`, then visit http://localhost:8000.
+Launch with `uv run python -m web`, then visit http://localhost:8000.
 
 <table>
 <tr>
@@ -312,9 +300,9 @@ holyeval/
 
 | Benchmark | Paper / Source | Datasets | What it evaluates |
 |---|---|---|---|
-| **ESLBench** | ThetaGen KG | `sample50-20260324` (50), `full-20260324` (1800) | Health knowledge graph Q&A |
 | **HealthBench** | [OpenAI HealthBench](https://arxiv.org/abs/2505.07469) | `sample` (100), `full`, `hard`, `consensus` | Medical AI quality |
 | **MedCalc-Bench** | [MedCalc-Bench](https://arxiv.org/abs/2406.12036) | `sample`, `full` | Medical calculations |
+| **ESLBench** | ThetaGen KG | `sample50-20260324` (50), `full-20260324` (1800) | Health knowledge graph Q&A |
 | **AgentClinic** | [AgentClinic](https://arxiv.org/abs/2405.07960) | `medqa` (107), `nejm` (15) | Clinical diagnosis |
 | **MedHall** | Custom | `theta` (30) | Hallucination detection |
 | **MemoryArena** | [MemoryArena](https://arxiv.org/abs/2501.13916) | `sample` (10), `full` (701) | Agent memory |
@@ -335,16 +323,16 @@ ESLBench evaluates an LLM's ability to answer health questions using structured 
 
 ```bash
 # First time: prepare data (automatic via Web UI, manual for CLI)
-python -m generator.eslbench.prepare_data
+uv run python -m generator.eslbench.prepare_data
 
-# Run evaluation: LLM + tool-augmented retrieval
-python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1
+# Quick test: 3 cases to verify setup (< $0.05)
+uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1 --limit 3
 
-# Full benchmark (1800 cases, 5 concurrent)
-python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-4.1 -p 5
+# Sample dataset (50 cases)
+uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1
 
-# Limit to 20 cases for quick testing
-python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-4.1 --limit 20
+# Full benchmark (1800 cases — significant API cost, review before running)
+uv run python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-4.1 -p 5
 ```
 
 The LLM target is equipped with a tool group (`eslbench/retrieve`) that provides JSON file reading, DuckDB queries, and indicator lookup — the LLM must use these tools to find answers in the user's health data.
@@ -361,7 +349,7 @@ Two ways:
 **B) Manual:**
 1. Create `benchmark/data/<name>/metadata.json` with target config
 2. Create `benchmark/data/<name>/<dataset>.jsonl` in BenchItem format
-3. Run: `python -m benchmark.basic_runner <name> <dataset> --target-model gpt-4.1`
+3. Run: `uv run python -m benchmark.basic_runner <name> <dataset> --target-model gpt-4.1`
 
 See [benchmark/data/history_demo/](benchmark/data/history_demo/) for a minimal example.
 
@@ -398,11 +386,11 @@ Use `/add-eval-agent` or `/add-target-agent` Claude Code skills for guided scaff
 
 ```bash
 # Prepare benchmark data (required for ESLBench; other benchmarks ship with data)
-python -m generator.eslbench.prepare_data          # download HF data + build DuckDB
-python -m generator.eslbench.prepare_data --force   # force rebuild
+uv run python -m generator.eslbench.prepare_data          # download HF data + build DuckDB
+uv run python -m generator.eslbench.prepare_data --force   # force rebuild
 
 # Run benchmark
-python -m benchmark.basic_runner <benchmark> <dataset> [options]
+uv run python -m benchmark.basic_runner <benchmark> <dataset> [options]
   --target-model MODEL    # LLM model to evaluate (e.g., gpt-4.1, gemini-3-pro)
   --target-type TYPE      # Target agent type (for multi-target benchmarks)
   --limit N               # Max cases to run
@@ -412,13 +400,13 @@ python -m benchmark.basic_runner <benchmark> <dataset> [options]
   --resume                # Resume from last checkpoint
 
 # Convert external datasets
-python -m generator.healthbench.converter input.jsonl output.jsonl --target-model gpt-4.1
-python -m generator.medcalc.converter
-python -m generator.agentclinic.converter input.jsonl output.jsonl
-python -m generator.memoryarena.converter
+uv run python -m generator.healthbench.converter input.jsonl output.jsonl --target-model gpt-4.1
+uv run python -m generator.medcalc.converter
+uv run python -m generator.agentclinic.converter input.jsonl output.jsonl
+uv run python -m generator.memoryarena.converter
 
 # Web UI
-python -m web             # http://localhost:8000
+uv run python -m web             # http://localhost:8000
 ```
 
 ## Configuration
@@ -436,29 +424,22 @@ Environment variables (in `.env`):
 ## Roadmap
 
 ### In Progress
-- [ ] Generic HTTP API TargetAgent — evaluate your own product/API endpoints, not just raw LLMs
-- [ ] Cross-model comparison & leaderboard — side-by-side scoring across models on the same benchmark
+- [ ] **GUI TargetAgent** — evaluate real products through their web UI, not just API endpoints. Browser-based agent interacts with your app like a real user, enabling end-to-end evaluation of any product with a frontend
 
 ### Planned
-- [ ] **Eval-driven optimization loop** — run benchmark → auto-analyze weaknesses → generate targeted improvements → re-run to verify
-- [ ] **A/B evaluation mode** — compare two models/prompts case-by-case on the same dataset
-- [ ] **Regression detection** — compare multiple runs over time, alert on score drops
-- [ ] **Docker support** — `docker compose up` for one-command deployment
-- [ ] **PyPI package** — `pip install holyeval`
-- [ ] **SDK mode** — `holyeval.run("healthbench", model="gpt-4.1")` for CI pipeline integration
-- [ ] **Human-in-the-loop review** — sample LLM-as-Judge results for human calibration
-- [ ] **More benchmarks** — MMLU-Med, PubMedQA, MedQA-USMLE, BioASQ, and community contributions
-- [ ] **Advanced visualization** — radar charts, error distribution, token efficiency analysis
+- [ ] **Eval-driven optimization loop** — run benchmark → auto-analyze failure patterns → generate targeted prompt/system improvements → re-run to verify. Close the loop between evaluation and iteration
+- [ ] **CI/CD integration** — `pip install holyeval` + `holyeval.run("healthbench", model="gpt-4.1")` as a one-liner in your CI pipeline. Regression detection across runs, alerting on score drops before deployment
+- [ ] **Industry agent & app deep evaluation** — comprehensive evaluation reports for mainstream AI agents and health apps (e.g. ChatGPT, Gemini, health assistants). Standardized scoring across safety, accuracy, and user experience, published as reproducible community benchmarks
 
 ## Development
 
 ```bash
 # Run tests
-pytest evaluator/tests/
+uv run pytest evaluator/tests/
 
 # Lint & format
-ruff check .
-ruff format .
+uv run ruff check .
+uv run ruff format .
 ```
 
 ## Contributing
