@@ -137,6 +137,34 @@
           "required": false
         }
       }
+    },
+    {
+      "type": "naive_rag_api",
+      "fields": {
+        "model": {
+          "default": "gemini-3-flash-preview",
+          "editable": true,
+          "required": true
+        },
+        "data_group": {
+          "default": "eslbench",
+          "editable": false
+        },
+        "user_email": {
+          "default": null,
+          "editable": false
+        },
+        "embedding_model": {
+          "default": "text-embedding-3-large",
+          "editable": true,
+          "required": false
+        },
+        "top_k": {
+          "default": 10,
+          "editable": true,
+          "required": false
+        }
+      }
     }
   ]
 }

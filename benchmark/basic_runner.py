@@ -29,6 +29,7 @@ target 合并优先级（高→低）:
 import argparse
 import asyncio
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import List
@@ -46,11 +47,13 @@ from evaluator.core.bench_schema import (
     find_target_spec,
     resolve_runtime_target,
 )
-from evaluator.core.orchestrator import BatchSession, do_batch_test
+from evaluator.core.orchestrator import BatchSession
 from evaluator.core.schema import TestCase
 from evaluator.utils.benchmark_reader import filter_bench_items, load_benchmark, resolve_data_path
 from evaluator.utils.checkpoint import CheckpointManager, CheckpointMeta
+from evaluator.utils.live_files import cleanup_live_dir, delete_live_file, write_live_file, write_live_init
 from evaluator.utils.report_reader import save_bench_report
+from evaluator.utils.task_registry import TaskRegistryEntry, cleanup_task_entry, write_task_entry
 
 logger = logging.getLogger(__name__)
 
@@ -147,13 +150,51 @@ async def run_benchmark(
         checkpoint_id,
     )
 
-    # 6. 执行评测（带检查点回调）
-    on_progress = _make_checkpoint_callback(mgr)
+    # 6. 创建 BatchSession（直接使用，支持 live file 和 task registry）
+    session = BatchSession(cases=test_cases, max_concurrency=max_concurrency)
+    task_id = session.id
+
+    # 写入 task registry（Web 可发现）
+    registry_entry = TaskRegistryEntry(
+        task_id=task_id,
+        checkpoint_session_id=checkpoint_id,
+        benchmark=benchmark,
+        dataset=dataset,
+        runtime_target=runtime_target.model_dump(mode="json"),
+        status="running",
+        created_at=datetime.now().isoformat(),
+        source="cli",
+        total=len(test_cases),
+        max_concurrency=max_concurrency,
+        pid=os.getpid(),
+    )
+    write_task_entry(registry_entry)
+
+    # 设置 checkpoint + live file 回调
+    def _on_progress(sess: BatchSession, case_id: str) -> None:
+        ctx = sess.contexts.get(case_id)
+        if ctx and ctx.result:
+            mgr.append_result(ctx.result)
+        delete_live_file(task_id, case_id)
+
+    session.on_progress = _on_progress
+
+    # 设置每轮对话 live file 回调
+    for ctx in session.contexts.values():
+        ctx.on_turn = lambda c, tid=task_id: write_live_file(tid, c)
+
+    # 写入初始 live file（让 Web UI 立即看到用例状态为 init）
+    write_live_init(task_id, [c.id for c in test_cases])
+
     started_at = datetime.now()
     try:
-        test_report = await do_batch_test(test_cases, max_concurrency=max_concurrency, on_progress=on_progress)
+        test_report = await session.run()
     except Exception:
         logger.error("评测执行失败（检查点已保留: %s，可使用 --resume 恢复）", checkpoint_id)
+        cleanup_live_dir(task_id)
+        registry_entry.status = "error"
+        registry_entry.error = "评测执行异常"
+        write_task_entry(registry_entry)
         raise
     finished_at = datetime.now()
 
@@ -168,9 +209,15 @@ async def run_benchmark(
         finished_at=finished_at,
     )
 
-    # 8. 保存报告 + 清理检查点
+    # 8. 保存报告 + 清理检查点 + 更新 registry
     report_path = save_bench_report(bench_report, benchmark=benchmark, dataset=dataset)
     mgr.cleanup()
+    cleanup_live_dir(task_id)
+
+    registry_entry.status = "completed"
+    registry_entry.report_path = str(report_path)
+    write_task_entry(registry_entry)
+
     _print_summary(bench_report, report_path)
 
     return bench_report
@@ -216,6 +263,7 @@ async def _resume_benchmark(
     concurrency = max_concurrency if max_concurrency > 0 else meta.max_concurrency
 
     remaining_items = [item for item in bench.items if item.id in remaining_ids]
+    registry_entry: TaskRegistryEntry | None = None
     if not remaining_items:
         logger.info("所有用例已完成，直接生成报告")
         all_results = completed_results
@@ -229,12 +277,49 @@ async def _resume_benchmark(
                 raise ValueError(f"用例 {item.id} 转换失败: {e}") from e
 
         logger.info("继续执行 %d 条用例 (concurrency=%s)", len(test_cases), concurrency or "unlimited")
-        on_progress = _make_checkpoint_callback(mgr)
+
+        # 创建 BatchSession + task registry + live files
+        session = BatchSession(cases=test_cases, max_concurrency=concurrency)
+        task_id = session.id
+
+        registry_entry = TaskRegistryEntry(
+            task_id=task_id,
+            checkpoint_session_id=meta.session_id,
+            benchmark=benchmark,
+            dataset=dataset,
+            runtime_target=meta.runtime_target,
+            status="running",
+            created_at=datetime.now().isoformat(),
+            source="cli",
+            total=len(meta.case_ids),
+            max_concurrency=concurrency,
+            pid=os.getpid(),
+        )
+        write_task_entry(registry_entry)
+
+        def _on_progress(sess: BatchSession, case_id: str) -> None:
+            ctx = sess.contexts.get(case_id)
+            if ctx and ctx.result:
+                mgr.append_result(ctx.result)
+            delete_live_file(task_id, case_id)
+
+        session.on_progress = _on_progress
+        for ctx in session.contexts.values():
+            ctx.on_turn = lambda c, tid=task_id: write_live_file(tid, c)
+
+        write_live_init(task_id, [c.id for c in test_cases])
+
         try:
-            test_report = await do_batch_test(test_cases, max_concurrency=concurrency, on_progress=on_progress)
+            test_report = await session.run()
         except Exception:
             logger.error("恢复执行失败（检查点已保留: %s，可再次 --resume）", meta.session_id)
+            cleanup_live_dir(task_id)
+            registry_entry.status = "error"
+            registry_entry.error = "恢复执行异常"
+            write_task_entry(registry_entry)
             raise
+
+        cleanup_live_dir(task_id)
         all_results = completed_results + list(test_report.cases)
 
     # 5. 按原始顺序排列结果
@@ -252,23 +337,18 @@ async def _resume_benchmark(
         finished_at=datetime.now(),
     )
 
-    # 7. 保存报告 + 清理检查点
+    # 7. 保存报告 + 清理检查点 + 更新 registry
     report_path = save_bench_report(bench_report, benchmark=benchmark, dataset=dataset)
     mgr.cleanup()
+
+    if registry_entry is not None:
+        registry_entry.status = "completed"
+        registry_entry.report_path = str(report_path)
+        write_task_entry(registry_entry)
+
     _print_summary(bench_report, report_path)
 
     return bench_report
-
-
-def _make_checkpoint_callback(mgr: CheckpointManager):
-    """创建检查点进度回调 — 每完成一个用例追加结果到 JSONL"""
-
-    def on_progress(session: BatchSession, case_id: str) -> None:
-        ctx = session.contexts.get(case_id)
-        if ctx and ctx.result:
-            mgr.append_result(ctx.result)
-
-    return on_progress
 
 
 # ============================================================

@@ -965,6 +965,94 @@ class GraphRAG:
         finally:
             await self._insert_done()
 
+    async def ainsert_typed(
+        self,
+        llm_chunks: list[str],
+        device_events: list[dict] | None = None,
+    ):
+        """分类型插入: llm_chunks 走 LLM 事件提取, device_events 直接写入图+VDB。
+
+        与 ainsert 不同，这里跳过 doc 级别和 token chunking 步骤，
+        llm_chunks 已经是分好的 chunk，直接进入事件提取流程。
+        """
+        await self._insert_start()
+        try:
+            # ---------- Step 1: Device events 先写入图（不含 VDB）
+            # 必须在 extract_events 之前写入，因为关系计算（batch_process_event_relationships_multiprocess）
+            # 通过 dyg_inst.get_all_nodes() 读取图中所有节点来建立关系边。
+            # device events 必须在那之前存在于图中，才能与 LLM 提取的事件建立时序/实体关系。
+            if device_events:
+                logger.info(f"[ainsert_typed] Pre-inserting {len(device_events)} device events to graph (before relationship computation)")
+                for ev in device_events:
+                    await self.event_dynamic_graph.upsert_node(ev["event_id"], node_data=ev)
+
+            # ---------- Step 2: LLM chunks 事件提取（含关系计算）
+            # extract_events 内部流程: LLM 抽取 → NER → merge 到图 → 关系计算(覆盖图中全部节点) → VDB
+            if llm_chunks:
+                inserting_chunks = {
+                    compute_mdhash_id(c.strip(), prefix="chunk-"): {
+                        "content": c.strip(),
+                        "chunk_order_index": i,
+                        "full_doc_id": "typed_insert",
+                    }
+                    for i, c in enumerate(llm_chunks)
+                }
+                _add_chunk_keys = await self.text_chunks.filter_keys(
+                    list(inserting_chunks.keys())
+                )
+                inserting_chunks = {
+                    k: v for k, v in inserting_chunks.items() if k in _add_chunk_keys
+                }
+                if inserting_chunks:
+                    logger.info(f"[ainsert_typed] Extracting events from {len(inserting_chunks)} LLM chunks")
+                    maybe_new_dyg, extraction_stats = await extract_events(
+                        inserting_chunks,
+                        dyg_inst=self.event_dynamic_graph,
+                        events_vdb=self.events_vdb,
+                        global_config={**self.get_config_dict(), "events_vdb": self.events_vdb},
+                        using_amazon_bedrock=self.using_amazon_bedrock,
+                    )
+                    self.extraction_stats = extraction_stats
+
+                    if maybe_new_dyg is not None:
+                        self.event_dynamic_graph = maybe_new_dyg
+                        logger.info("Updated dynamic event graph from LLM chunks")
+                    else:
+                        failed_phase = ""
+                        if isinstance(extraction_stats, dict) and extraction_stats.get("failed"):
+                            failed_phase = extraction_stats.get("phase", "unknown")
+                        if failed_phase:
+                            raise RuntimeError(
+                                f"Event extraction failed at phase: {failed_phase}"
+                            )
+                        logger.warning("No new events found from LLM chunks")
+
+                    await self.text_chunks.upsert(inserting_chunks)
+                else:
+                    logger.warning("All LLM chunks already in storage")
+                    await self._maybe_resume_events_vdb_from_graph()
+
+            # ---------- Step 3: Device events 写入 VDB（embedding）
+            # 图节点已在 Step 1 写入，关系已在 Step 2 计算，这里只补 embedding
+            if device_events:
+                if self.events_vdb is not None and not getattr(self, "skip_embedding", False):
+                    events_for_vdb = {}
+                    for ev in device_events:
+                        events_for_vdb[ev["event_id"]] = {
+                            "content": f"{ev['sentence']} (Time: {ev['timestamp']})",
+                            "event_id": ev["event_id"],
+                            "timestamp": ev["timestamp"],
+                            "sentence": ev["sentence"],
+                            "context": "",
+                            "source_id": ev["source_id"],
+                        }
+                    logger.info(f"[ainsert_typed] Upserting {len(events_for_vdb)} device events to VDB")
+                    await self.events_vdb.upsert(events_for_vdb)
+
+            time.sleep(2)
+        finally:
+            await self._insert_done()
+
     def _events_vdb_file_path(self) -> Optional[Path]:
         fp = getattr(self.events_vdb, "_client_file_name", None)
         if not fp:

@@ -437,8 +437,8 @@ def bench_item_to_test_case(
             if matched_override is not None:
                 break
 
-    # 跨族 fallback: 从 theta_api.email 推导 user_email（hippo_rag_api / dyg_rag_api 共用）
-    if matched_override is None and spec.type in ("hippo_rag_api", "dyg_rag_api"):
+    # 跨族 fallback: 从 theta_api.email 推导 user_email（hippo_rag_api / dyg_rag_api / naive_rag_api / evermem / mem0_rag_api 共用）
+    if matched_override is None and spec.type in ("hippo_rag_api", "dyg_rag_api", "naive_rag_api", "evermem", "mem0_rag_api"):
         theta_override = item.user.target_overrides.get("theta_api")
         if theta_override and isinstance(theta_override, dict) and "email" in theta_override:
             matched_override = {"user_email": theta_override["email"]}

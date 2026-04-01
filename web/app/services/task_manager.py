@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -22,9 +21,15 @@ from evaluator.core.orchestrator import BatchSession, CaseContext, do_batch_eval
 from evaluator.core.schema import EvalResult, TargetInfo, TargetSpec, TestCost, TestResult
 from evaluator.utils.benchmark_reader import _read_metadata, filter_bench_items, load_bench_items, resolve_data_path
 from evaluator.utils.checkpoint import CheckpointManager, CheckpointMeta
+from evaluator.utils.live_files import cleanup_live_dir, delete_live_file, read_live_file, write_live_file, write_live_init
 from evaluator.utils.report_reader import save_bench_report
-
-LIVE_DIR = Path("benchmark/report/.live")
+from evaluator.utils.task_registry import (
+    TaskRegistryEntry,
+    is_process_alive,
+    list_task_entries,
+    read_task_entry,
+    write_task_entry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,87 +156,6 @@ class TaskManager:
         )
 
         logger.info("Task created: %s (%s/%s, %d cases)", session.id, benchmark, dataset, len(test_cases))
-        return entry
-
-    async def resume_task(
-        self,
-        session_id: str,
-        spec: TargetSpec,
-    ) -> TaskEntry:
-        """Resume an incomplete checkpoint task
-
-        Args:
-            session_id: checkpoint session ID
-            spec: TargetSpec from metadata.json
-
-        Returns:
-            TaskEntry
-        """
-        meta, completed_results = CheckpointManager.load(session_id)
-
-        # Verify data file hash
-        path = resolve_data_path(meta.benchmark, meta.dataset)
-        current_hash = CheckpointManager.compute_data_hash(path)
-        if meta.data_file_hash and current_hash != meta.data_file_hash:
-            logger.warning("Data file changed (hash: %s -> %s)", meta.data_file_hash, current_hash)
-
-        # Filter completed cases (re-run cancelled ones)
-        cancelled_ids = {r.id for r in completed_results if r.eval.feedback == "用例被取消"}
-        completed_ids = {r.id for r in completed_results} - cancelled_ids
-        completed_results = [r for r in completed_results if r.id not in cancelled_ids]
-        remaining_ids = set(meta.case_ids) - completed_ids
-
-        logger.info(
-            "Resuming task: %s/%s (completed %d/%d, remaining %d)",
-            meta.benchmark, meta.dataset, len(completed_ids), len(meta.case_ids), len(remaining_ids),
-        )
-
-        # Load remaining cases (with $ref resolution)
-        metadata = _read_metadata(path.parent)
-        params = metadata.get("params") or None
-        items = load_bench_items(path, params=params)
-        remaining_items = [item for item in items if item.id in remaining_ids]
-
-        if not remaining_items:
-            raise ValueError("All cases already completed, nothing to resume")
-
-        runtime_target = resolve_runtime_target(spec, meta.cli_overrides)
-        test_cases = []
-        for item in remaining_items:
-            try:
-                test_cases.append(bench_item_to_test_case(item, spec, meta.cli_overrides))
-            except Exception as e:
-                logger.error("Case %s conversion failed: %s", item.id, e)
-                raise ValueError(f"Case {item.id} conversion failed: {e}") from e
-
-        # Create BatchSession (new ID)
-        session = BatchSession(
-            cases=test_cases,
-            max_concurrency=meta.max_concurrency,
-        )
-
-        entry = TaskEntry(
-            task_id=session.id,
-            checkpoint_session_id=session_id,
-            benchmark=meta.benchmark,
-            dataset=meta.dataset,
-            runtime_target=runtime_target,
-            session=session,
-            cli_overrides=meta.cli_overrides,
-            data_file_hash=current_hash,
-            resumed_results=completed_results,
-        )
-        self._tasks[session.id] = entry
-
-        # Run in background (append results using original checkpoint session_id)
-        entry.asyncio_task = asyncio.create_task(
-            self._run_session(entry, meta.max_concurrency, checkpoint_session_id=session_id)
-        )
-
-        logger.info(
-            "Resumed task created: %s (original checkpoint %s, %d remaining cases)",
-            session.id, session_id, len(test_cases),
-        )
         return entry
 
     def check_eval(
@@ -459,7 +383,7 @@ class TaskManager:
                 if ctx and ctx.result:
                     mgr.append_result(ctx.result)
                 # Case completed, delete corresponding live file
-                _delete_live_file(entry.task_id, case_id)
+                delete_live_file(entry.task_id, case_id)
                 if original_on_progress:
                     original_on_progress(session, case_id)
 
@@ -467,7 +391,27 @@ class TaskManager:
 
             # Set per-turn dialogue callback (write live files)
             for ctx in entry.session.contexts.values():
-                ctx.on_turn = lambda c, tid=entry.task_id: _write_live_file(tid, c)
+                ctx.on_turn = lambda c, tid=entry.task_id: write_live_file(tid, c)
+
+            # Write task registry (so CLI/Web share the same discovery mechanism)
+            import os
+            reg = TaskRegistryEntry(
+                task_id=entry.task_id,
+                checkpoint_session_id=cp_id,
+                benchmark=entry.benchmark,
+                dataset=entry.dataset,
+                runtime_target=entry.runtime_target.model_dump(mode="json") if entry.runtime_target else None,
+                status="running",
+                created_at=entry.created_at.isoformat(),
+                source="web",
+                total=len(entry.session.cases),
+                max_concurrency=max_concurrency,
+                pid=os.getpid(),
+            )
+            write_task_entry(reg)
+
+            # Write initial live files (so UI shows cases as init immediately)
+            write_live_init(entry.task_id, [c.id for c in entry.session.cases])
 
             started_at = datetime.now()
             test_report = await entry.session.run()
@@ -494,22 +438,29 @@ class TaskManager:
             entry.report_path = str(report_path)
 
             # Clean up live directory
-            _cleanup_live_dir(entry.task_id)
+            cleanup_live_dir(entry.task_id)
 
             if entry.session.cancel_event.is_set():
                 entry.status = "cancelled"
+                reg.status = "cancelled"
                 # Keep checkpoint on cancel to allow future resume
             else:
                 entry.status = "completed"
+                reg.status = "completed"
                 mgr.cleanup()
+            reg.report_path = entry.report_path
+            write_task_entry(reg)
             entry._release_heavy_data()
 
         except Exception as e:
             # Keep checkpoint on error to allow future resume
-            _cleanup_live_dir(entry.task_id)
+            cleanup_live_dir(entry.task_id)
             logger.error("Task execution failed: %s - %s (checkpoint preserved)", entry.task_id, e, exc_info=True)
             entry.status = "error"
             entry.error = str(e)
+            reg.status = "error"
+            reg.error = str(e)
+            write_task_entry(reg)
             entry._release_heavy_data()
 
     def cancel_task(self, task_id: str) -> None:
@@ -592,15 +543,136 @@ class TaskManager:
 
         return snapshot
 
-    def list_checkpoints(self, benchmark: str | None = None) -> list[CheckpointMeta]:
-        """List resumable checkpoints"""
-        # Exclude checkpoints for currently running tasks
-        # Note: for resumed tasks task_id != checkpoint_session_id, filter by checkpoint_session_id
-        running_checkpoint_ids = {
-            e.checkpoint_session_id for e in self._tasks.values() if e.status == "running"
+    def discover_external_tasks(self) -> list[TaskRegistryEntry]:
+        """Discover tasks not managed by this TaskManager (from .tasks/ registry)
+
+        Includes both CLI-started tasks and orphaned web tasks (e.g. after web server restart).
+        """
+        entries = list_task_entries()  # All sources
+        result = []
+        for entry in entries:
+            # Skip tasks already managed in memory
+            if entry.task_id in self._tasks:
+                continue
+            # Check liveness: if status is "running" but process is dead, mark as error
+            if entry.status == "running" and entry.pid and not is_process_alive(entry.pid):
+                entry.status = "error"
+                entry.error = "进程已退出（PID 不存在）"
+                write_task_entry(entry)
+            result.append(entry)
+        return result
+
+    def get_cli_snapshot(self, task_id: str) -> dict[str, Any] | None:
+        """Build a task snapshot for a CLI-started task from disk files
+
+        Returns snapshot dict compatible with BatchSession.snapshot() format, or None.
+        """
+        reg = read_task_entry(task_id)
+        if not reg:
+            return None
+
+        # Check liveness
+        if reg.status == "running" and reg.pid and not is_process_alive(reg.pid):
+            reg.status = "error"
+            reg.error = "CLI 进程已退出（PID 不存在）"
+            write_task_entry(reg)
+
+        # Build cases dict from checkpoint + live files
+        cases: dict[str, dict] = {}
+        completed_count = 0
+        cancelled_count = 0
+
+        # Try loading checkpoint meta for case_ids
+        case_ids: list[str] = []
+        completed_results: list[TestResult] = []
+        try:
+            meta, completed_results = CheckpointManager.load(reg.checkpoint_session_id)
+            case_ids = meta.case_ids
+        except FileNotFoundError:
+            pass
+
+        # Fallback: if no checkpoint but task is running/error, load case_ids from data file
+        if not case_ids and reg.status in ("running", "error"):
+            try:
+                path = resolve_data_path(reg.benchmark, reg.dataset)
+                items = load_bench_items(path)
+                case_ids = [item.id for item in items]
+                # If we have a limit in registry, only take first N
+                if reg.total and len(case_ids) > reg.total:
+                    case_ids = case_ids[:reg.total]
+            except Exception:
+                pass
+
+        # Fallback: if no checkpoint and completed, load from report
+        if not case_ids and reg.status == "completed" and reg.report_path:
+            report_cases, max_conc, rt = _load_report_cases(reg.report_path)
+            if report_cases:
+                cases = report_cases
+                completed_count = len(report_cases)
+
+        # Initialize all cases as pending (if not already loaded from report)
+        if not cases:
+            for cid in case_ids:
+                cases[cid] = {"status": "pending", "turn": 0, "title": cid, "tags": []}
+
+        # Mark completed cases from checkpoint results
+        for r in completed_results:
+            cases[r.id] = {
+                "status": "completed",
+                "turn": 0,
+                "title": r.title or r.id,
+                "user_type": r.user_type,
+                "target_type": r.target_type,
+                "eval_type": r.eval_type,
+                "score": r.eval.score,
+                "eval_result": r.eval.result,
+                "cost": r.cost.model_dump(mode="json") if r.cost else None,
+                "tags": r.tags,
+            }
+            if r.eval.feedback == "用例被取消":
+                cancelled_count += 1
+            else:
+                completed_count += 1
+
+        # Check live files for in-progress cases
+        from evaluator.utils.live_files import LIVE_DIR
+        live_dir = LIVE_DIR / task_id
+        if live_dir.is_dir():
+            for live_file in live_dir.glob("*.json"):
+                cid = live_file.stem
+                if cid in cases and cases[cid]["status"] == "pending":
+                    cases[cid]["status"] = "dialogue"
+                elif cid not in cases:
+                    # Case found in live files but not in case_ids (e.g. filtered by --ids)
+                    cases[cid] = {"status": "dialogue", "turn": 0, "title": cid, "tags": []}
+
+        snap: dict[str, Any] = {
+            "id": reg.task_id,
+            "status": reg.status,
+            "benchmark": reg.benchmark,
+            "dataset": reg.dataset,
+            "runtime_target": reg.runtime_target,
+            "created_at": reg.created_at,
+            "report_path": reg.report_path,
+            "total": reg.total or len(cases),
+            "completed": completed_count,
+            "cancelled": cancelled_count > 0,
+            "cases": cases,
+            "error": reg.error,
+            "max_concurrency": reg.max_concurrency,
+            "source": "cli",
         }
-        checkpoints = CheckpointManager.find_checkpoints(benchmark=benchmark)
-        return [cp for cp in checkpoints if cp.session_id not in running_checkpoint_ids]
+
+        # Stats from report if completed
+        if reg.status == "completed" and reg.report_path:
+            stats_by_tag, report_summary = _load_report_summary(reg.report_path)
+            snap["stats_by_tag"] = stats_by_tag
+            if report_summary:
+                snap["report_summary"] = report_summary
+        else:
+            snap["stats_by_tag"] = _compute_snapshot_tag_stats(cases)
+
+        return snap
 
     def cancel_all(self) -> None:
         """Cancel all active tasks on shutdown"""
@@ -723,63 +795,8 @@ def _load_report_summary(report_path: str | None) -> tuple[dict[str, dict], dict
     return stats_by_tag, report_summary
 
 
-# ==================== Live file management ====================
-
-
-def _write_live_file(task_id: str, ctx: CaseContext) -> None:
-    """Write current dialogue state to file after each turn"""
-    task_dir = LIVE_DIR / task_id
-    task_dir.mkdir(parents=True, exist_ok=True)
-
-    test_memory = [m.model_dump(mode="json") for m in ctx.test_agent.memory_list] if ctx.test_agent else []
-    target_memory = [m.model_dump(mode="json") for m in ctx.target_agent.memory_list] if ctx.target_agent else []
-
-    # Preloaded history (HealthBench multi-turn etc.), aligned with report format
-    history = []
-    if ctx.test_agent and ctx.test_agent.history:
-        history = [{"type": m.type, "content": m.content} for m in ctx.test_agent.history]
-
-    data = {
-        "id": ctx.case_id,
-        "eval": {
-            "result": None,
-            "score": None,
-            "feedback": None,
-            "trace": {
-                "history": history,
-                "test_memory": test_memory,
-                "target_memory": target_memory,
-            },
-        },
-        "_live": True,
-    }
-
-    file_path = task_dir / f"{ctx.case_id}.json"
-    file_path.write_text(json.dumps(data, ensure_ascii=False, default=str))
-
-
-def read_live_file(task_id: str, case_id: str) -> dict | None:
-    """Read live file for a running case"""
-    file_path = LIVE_DIR / task_id / f"{case_id}.json"
-    if file_path.exists():
-        try:
-            return json.loads(file_path.read_text())
-        except (json.JSONDecodeError, OSError):
-            return None
-    return None
-
-
-def _delete_live_file(task_id: str, case_id: str) -> None:
-    """Delete live file after case completion"""
-    file_path = LIVE_DIR / task_id / f"{case_id}.json"
-    file_path.unlink(missing_ok=True)
-
-
-def _cleanup_live_dir(task_id: str) -> None:
-    """Clean up entire live directory after task ends"""
-    task_dir = LIVE_DIR / task_id
-    if task_dir.exists():
-        shutil.rmtree(task_dir, ignore_errors=True)
+    # Note: live file functions have been moved to evaluator/utils/live_files.py
+    # and imported at the top of this module: write_live_file, read_live_file, delete_live_file, cleanup_live_dir
 
 
 # Global singleton

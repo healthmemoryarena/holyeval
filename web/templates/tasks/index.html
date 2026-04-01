@@ -8,40 +8,6 @@
         <p class="text-sm text-muted-foreground mt-1">Select benchmark dataset, configure parameters, and start evaluation</p>
     </div>
 
-    <!-- ====== Checkpoint recovery ====== -->
-    <template x-if="checkpoints.length > 0">
-        <div class="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4 mb-5">
-            <div class="flex items-start gap-3">
-                <svg class="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
-                </svg>
-                <div class="flex-1">
-                    <h3 class="text-sm font-medium text-amber-800 dark:text-amber-200">Unfinished evaluation tasks found</h3>
-                    <div class="mt-2 space-y-2">
-                        <template x-for="cp in checkpoints" :key="cp.session_id">
-                            <div class="flex items-center gap-3 text-sm">
-                                <span class="font-medium" x-text="cp.benchmark + '/' + cp.dataset"></span>
-                                <span class="text-muted-foreground tabular-nums" x-text="cp.completed_count + '/' + cp.case_count + ' completed'"></span>
-                                <span class="text-xs text-muted-foreground" x-text="cp.target_type"></span>
-                                <div class="ml-auto flex items-center gap-2">
-                                    <button @click="resumeCheckpoint(cp.session_id)"
-                                            class="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 transition-colors">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/></svg>
-                                        Resume
-                                    </button>
-                                    <button @click="deleteCheckpoint(cp.session_id)"
-                                            class="inline-flex items-center rounded-md px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                                        Discard
-                                    </button>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </template>
-
     <!-- ====== Step 1: Select benchmark & dataset ====== -->
     <div class="rounded-lg border border-border bg-card mb-5">
         <div class="px-5 py-3 border-b border-border flex items-center gap-2">
@@ -555,7 +521,7 @@ const _fullWidthPattern = /prompt|description|note|message|content/i;
 
 function taskManager() {
     return {
-        benchmarks: [], datasets: [], tasks: [], reports: [], checkpoints: [],
+        benchmarks: [], datasets: [], tasks: [], reports: [],
         reportFilterBench: '', reportFilterName: '', reportSearchQuery: '',
         form: {
             benchmark: '', dataset: '', scope: 'all', limit: null, max_concurrency: 3,
@@ -782,7 +748,6 @@ function taskManager() {
             this.resetTargetValues();
 
             await this.refreshTasks();
-            await this.loadCheckpoints();
             this.pollTimer = setInterval(() => this.refreshTasks(), 5000);
 
             const params = new URLSearchParams(window.location.search);
@@ -985,25 +950,6 @@ function taskManager() {
                 this.prepareStatus = b?.prepare_status || null;
                 this.prepareError = b?.prepare_error || null;
             }
-        },
-        async loadCheckpoints() {
-            try {
-                const res = await fetch('/api/checkpoints');
-                if (res.ok) this.checkpoints = await res.json();
-            } catch (e) { console.warn('Failed to load checkpoints', e); }
-        },
-        async resumeCheckpoint(sessionId) {
-            try {
-                const res = await fetch(`/api/checkpoints/${sessionId}/resume`, { method: 'POST' });
-                if (!res.ok) { const err = await res.json(); alert(err.detail || 'Failed to resume'); return; }
-                const task = await res.json();
-                window.location.href = `/tasks/${task.task_id}`;
-            } catch (e) { alert('Resume failed: ' + e.message); }
-        },
-        async deleteCheckpoint(sessionId) {
-            if (!confirm('Discard this checkpoint? Completed progress will be lost.')) return;
-            await fetch(`/api/checkpoints/${sessionId}`, { method: 'DELETE' });
-            await this.loadCheckpoints();
         },
         async deleteReport(benchmark, filename) {
             if (!confirm(`Delete report ${filename}? This cannot be undone.`)) return;

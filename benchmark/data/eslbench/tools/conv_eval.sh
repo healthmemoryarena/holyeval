@@ -14,6 +14,15 @@
 #   # 跳过题目生成（已有 kg_evaluation_queries.json）
 #   bash conv_eval.sh --email user5022@demo --skip-query-gen
 #
+#   # 仅处理 kg_evaluation_queries（跳过其他 json 链接/上传/DuckDB）
+#   bash conv_eval.sh --email user5022@demo --kg-query-only
+#
+#   # 指定外部 kg_evaluation_queries.json 文件，仅处理该文件
+#   bash conv_eval.sh --email user5022@demo --kg-query-only /path/to/kg_evaluation_queries.json
+#
+#   # 指定每个维度抽样数量（默认 10，5维共50条）
+#   bash conv_eval.sh --email user5022@demo --sample-n-per-dim 20
+#
 #   # 只做数据准备不跑评测
 #   bash conv_eval.sh --email user5022@demo --no-eval
 #
@@ -58,7 +67,7 @@ THETAGEN_DATA_DIR="$HOLYEVAL_DIR/benchmark/data/eslbench/.data"
 USER_EMAIL=""
 USER_DIR=""
 MODEL="gpt-5.4"
-BENCHMARK="thetagen_test_3"
+BENCHMARK="eslbench"
 DATASET="full_sample"
 SKIP_QUERY_GEN=false
 NO_EVAL=false
@@ -71,6 +80,9 @@ ESLBENCH_BATCH="${ESLBENCH_HF_BATCH:-202604}"
 QUERIES_PER_USER=100
 SEED=42
 PARALLELISM=1
+KG_QUERY_ONLY=false
+KG_QUERY_ONLY_FILE=""
+SAMPLE_N_PER_DIM=10
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -88,6 +100,13 @@ while [[ $# -gt 0 ]]; do
         --eslbench-repo) ESLBENCH_REPO="$2"; shift 2 ;;
         --eslbench-batch) ESLBENCH_BATCH="$2"; shift 2 ;;
         --queries-per-user) QUERIES_PER_USER="$2"; shift 2 ;;
+        --kg-query-only)
+            KG_QUERY_ONLY=true
+            if [[ $# -gt 1 && ! "$2" =~ ^- ]]; then
+                KG_QUERY_ONLY_FILE="$2"; shift
+            fi
+            shift ;;
+        --sample-n-per-dim) SAMPLE_N_PER_DIM="$2"; shift 2 ;;
         --seed) SEED="$2"; shift 2 ;;
         -p) PARALLELISM="$2"; shift 2 ;;
         -*)
@@ -235,6 +254,9 @@ else
     echo "  $0 --user-dir /path/to/3941,/path/to/3942      # 逗号分隔多个目录"
     echo "  $0 --user-dir /path/to/data/                   # 父目录，自动扫描数字子目录"
     echo "  $0 --email user5022@demo,user5023@demo         # 逗号分隔多个 email"
+    echo "  $0 --email user5022@demo --kg-query-only                # 仅处理已有 kg_query"
+    echo "  $0 --email user5022@demo --kg-query-only /path/to/file  # 指定外部 kg_query"
+    echo "  $0 --email user5022@demo --sample-n-per-dim 20  # 每维度20条"
     exit 1
 fi
 
@@ -270,6 +292,10 @@ for CURRENT_EMAIL in "${EMAIL_LIST[@]}"; do
     echo "  模型:        $MODEL"
     echo "  Benchmark:   $BENCHMARK"
     echo "  Dataset:     $DATASET"
+    if [[ "$KG_QUERY_ONLY" == true ]]; then
+    echo "  KG Only:     true${KG_QUERY_ONLY_FILE:+ ($KG_QUERY_ONLY_FILE)}"
+    fi
+    echo "  Sample/dim:  $SAMPLE_N_PER_DIM"
     echo "============================================================"
 
 # ============================================================
@@ -278,7 +304,24 @@ for CURRENT_EMAIL in "${EMAIL_LIST[@]}"; do
 
 QUERIES_FILE="$CURRENT_USER_DIR/kg_evaluation_queries.json"
 
-if [[ "$SKIP_QUERY_GEN" == true ]]; then
+if [[ "$KG_QUERY_ONLY" == true ]]; then
+    echo ""
+    if [[ -n "$KG_QUERY_ONLY_FILE" ]]; then
+        echo "[Step 1] 使用指定的 kg_evaluation_queries 文件: $KG_QUERY_ONLY_FILE"
+        if [[ ! -f "$KG_QUERY_ONLY_FILE" ]]; then
+            echo "错误: 指定的文件不存在: $KG_QUERY_ONLY_FILE" >&2
+            exit 1
+        fi
+        cp "$KG_QUERY_ONLY_FILE" "$QUERIES_FILE"
+        echo "  → 已复制到: $QUERIES_FILE"
+    else
+        echo "[Step 1] 使用已有的 kg_evaluation_queries 文件 (--kg-query-only)"
+        if [[ ! -f "$QUERIES_FILE" ]]; then
+            echo "错误: $QUERIES_FILE 不存在，请通过 --kg-query-only <file> 指定" >&2
+            exit 1
+        fi
+    fi
+elif [[ "$SKIP_QUERY_GEN" == true ]]; then
     echo ""
     echo "[Step 1] 跳过题目生成 (--skip-query-gen)"
     if [[ ! -f "$QUERIES_FILE" ]]; then
@@ -352,44 +395,54 @@ fi
 # Step 4: 创建数据目录 + DuckDB
 # ============================================================
 
-echo ""
-echo "[Step 4] 准备数据目录 + DuckDB..."
-
 TARGET_DATA_DIR="$THETAGEN_DATA_DIR/$USER_DIR_NAME"
 mkdir -p "$TARGET_DATA_DIR"
 
-# 软链接数据文件（注意: 不链接 device_data.json，该文件过大会导致 OOM/segfault）
-# retrieve 工具应通过 timeline.json + DuckDB 访问设备数据
-for f in events.json exam_data.json profile.json; do
-    if [[ -f "$CURRENT_USER_DIR/$f" ]]; then
-        ln -sf "$CURRENT_USER_DIR/$f" "$TARGET_DATA_DIR/$f"
+if [[ "$KG_QUERY_ONLY" == true ]]; then
+    echo ""
+    echo "[Step 4] 仅软链接 kg_evaluation_queries.json (--kg-query-only)..."
+    if [[ -f "$QUERIES_FILE" ]]; then
+        ln -sf "$QUERIES_FILE" "$TARGET_DATA_DIR/kg_evaluation_queries.json"
+        echo "  → $TARGET_DATA_DIR/kg_evaluation_queries.json"
     else
-        echo "  警告: 缺少 $f" >&2
-    fi
-done
-
-# 软链接 timeline（兼容 *_timeline.json 命名）
-# 重要: retrieve.py 硬编码读取 "timeline.json"，必须创建标准名称的链接
-TIMELINE=$(find "$CURRENT_USER_DIR" -name "*_timeline.json" -type f 2>/dev/null | head -1)
-if [[ -n "$TIMELINE" ]]; then
-    ln -sf "$TIMELINE" "$TARGET_DATA_DIR/$(basename "$TIMELINE")"
-    # 如果原文件不叫 timeline.json，额外创建 timeline.json 链接
-    if [[ "$(basename "$TIMELINE")" != "timeline.json" ]]; then
-        ln -sf "$TIMELINE" "$TARGET_DATA_DIR/timeline.json"
-        echo "  → timeline.json → $(basename "$TIMELINE")"
+        echo "  警告: $QUERIES_FILE 不存在" >&2
     fi
 else
-    echo "  警告: 未找到 *_timeline.json" >&2
-fi
+    echo ""
+    echo "[Step 4] 准备数据目录 + DuckDB..."
 
-# 软链接 queries
-if [[ -f "$QUERIES_FILE" ]]; then
-    ln -sf "$QUERIES_FILE" "$TARGET_DATA_DIR/kg_evaluation_queries.json"
-fi
+    # 软链接数据文件（注意: 不链接 device_data.json，该文件过大会导致 OOM/segfault）
+    # retrieve 工具应通过 timeline.json + DuckDB 访问设备数据
+    for f in events.json exam_data.json profile.json; do
+        if [[ -f "$CURRENT_USER_DIR/$f" ]]; then
+            ln -sf "$CURRENT_USER_DIR/$f" "$TARGET_DATA_DIR/$f"
+        else
+            echo "  警告: 缺少 $f" >&2
+        fi
+    done
 
-# 构建 DuckDB
-cd "$HOLYEVAL_DIR"
-"$HOLYEVAL_VENV" -c "
+    # 软链接 timeline（兼容 *_timeline.json 命名）
+    # 重要: retrieve.py 硬编码读取 "timeline.json"，必须创建标准名称的链接
+    TIMELINE=$(find "$CURRENT_USER_DIR" -name "*_timeline.json" -type f 2>/dev/null | head -1)
+    if [[ -n "$TIMELINE" ]]; then
+        ln -sf "$TIMELINE" "$TARGET_DATA_DIR/$(basename "$TIMELINE")"
+        # 如果原文件不叫 timeline.json，额外创建 timeline.json 链接
+        if [[ "$(basename "$TIMELINE")" != "timeline.json" ]]; then
+            ln -sf "$TIMELINE" "$TARGET_DATA_DIR/timeline.json"
+            echo "  → timeline.json → $(basename "$TIMELINE")"
+        fi
+    else
+        echo "  警告: 未找到 *_timeline.json" >&2
+    fi
+
+    # 软链接 queries
+    if [[ -f "$QUERIES_FILE" ]]; then
+        ln -sf "$QUERIES_FILE" "$TARGET_DATA_DIR/kg_evaluation_queries.json"
+    fi
+
+    # 构建 DuckDB
+    cd "$HOLYEVAL_DIR"
+    "$HOLYEVAL_VENV" -c "
 from generator.eslbench.prepare_data import create_user_duckdb
 from pathlib import Path
 create_user_duckdb(Path('$TARGET_DATA_DIR'), force=True)
@@ -401,6 +454,7 @@ for t in ['device_indicators', 'exam_indicators', 'events']:
     print(f'    {t}: {r[0]} rows')
 con.close()
 "
+fi
 
 echo "  → 数据目录: $TARGET_DATA_DIR"
 
@@ -410,13 +464,25 @@ echo "  → 数据目录: $TARGET_DATA_DIR"
 
 HF_UPLOADER="$SCRIPT_DIR/hf_uploader.py"
 
+# 加载 HF_TOKEN（如未设置则从 .env 读取）
+if [[ -z "${HF_TOKEN:-}" && -f "$HOLYEVAL_DIR/.env" ]]; then
+    HF_TOKEN="$(grep -oP 'HF_TOKEN=\K.*' "$HOLYEVAL_DIR/.env" 2>/dev/null || true)"
+    export HF_TOKEN
+fi
+
+HF_EXTRA_ARGS=()
+if [[ "$KG_QUERY_ONLY" == true ]]; then
+    HF_EXTRA_ARGS+=(--kg-query-only)
+fi
+
 if [[ "$UPLOAD_HF" == true ]]; then
     echo ""
     echo "[Step 5] 上传数据到 HuggingFace ($HF_REPO batch=$HF_BATCH)..."
     cd "$HOLYEVAL_DIR"
     "$HOLYEVAL_VENV" "$HF_UPLOADER" \
         --repo "$HF_REPO" --batch "$HF_BATCH" \
-        --user-dir "$CURRENT_USER_DIR" --dir-name "$USER_DIR_NAME"
+        --user-dir "$CURRENT_USER_DIR" --dir-name "$USER_DIR_NAME" \
+        "${HF_EXTRA_ARGS[@]}"
 else
     echo ""
     echo "[Step 5] 跳过 HF 上传 (需要 --upload-hf)"
@@ -428,7 +494,8 @@ if [[ "$UPLOAD_ESLBENCH" == true ]]; then
     cd "$HOLYEVAL_DIR"
     "$HOLYEVAL_VENV" "$HF_UPLOADER" \
         --repo "$ESLBENCH_REPO" --batch "$ESLBENCH_BATCH" \
-        --user-dir "$CURRENT_USER_DIR" --dir-name "$USER_DIR_NAME"
+        --user-dir "$CURRENT_USER_DIR" --dir-name "$USER_DIR_NAME" \
+        "${HF_EXTRA_ARGS[@]}"
 else
     echo ""
     echo "[Step 5b] 跳过 ESL-Bench 上传 (需要 --upload-eslbench)"
@@ -444,138 +511,37 @@ echo "  ✓ 用户 $CURRENT_EMAIL 数据准备完成"
 done  # END batch loop over EMAIL_LIST
 
 # ============================================================
-# Step 6.5: 生成 eslbench full + sample50（按难度分层抽样）
+# Step 6.5: 生成 full_mid / full-YYYYMMDD / sample JSONL
 # ============================================================
 
 ESLBENCH_DIR="$HOLYEVAL_DIR/benchmark/data/eslbench"
 DATE_TAG="$(date +%Y%m%d)"
+FULL_MID="$ESLBENCH_DIR/full_mid.jsonl"
 FULL_ESLBENCH="$ESLBENCH_DIR/full-${DATE_TAG}.jsonl"
-SAMPLE50_ESLBENCH="$ESLBENCH_DIR/sample50-${DATE_TAG}.jsonl"
 
 if [[ -f "$JSONL_FILE" ]]; then
-    mkdir -p "$ESLBENCH_DIR"
-    # 复制合并后的 full JSONL 作为 eslbench full
-    cp "$JSONL_FILE" "$FULL_ESLBENCH"
-    FULL_COUNT=$(wc -l < "$FULL_ESLBENCH")
+    # full_mid.jsonl: 当前批次的合并 JSONL（每次覆盖）
+    cp "$JSONL_FILE" "$FULL_MID"
     echo ""
-    echo "[Step 6.5] 生成 eslbench JSONL..."
-    echo "  → full: $FULL_ESLBENCH ($FULL_COUNT 条)"
+    echo "[Step 6.5] full_mid.jsonl: $(wc -l < "$FULL_MID") 条"
 
-    # 按 difficulty 分层抽样: 每种难度 10 条，共 50 条
-    "$HOLYEVAL_VENV" -c "
-import json, random
-from collections import defaultdict
-
-with open('$FULL_ESLBENCH') as f:
-    items = [json.loads(line) for line in f]
-
-# 按 difficulty 分组
-groups = defaultdict(list)
-for item in items:
-    diff = item.get('eval', {}).get('difficulty', 'unknown')
-    groups[diff].append(item)
-
-rng = random.Random($SEED)
-sampled = []
-for diff in sorted(groups):
-    pool = groups[diff]
-    n = min(10, len(pool))
-    sampled.extend(rng.sample(pool, n))
-
-rng.shuffle(sampled)
-
-with open('$SAMPLE50_ESLBENCH', 'w') as f:
-    for item in sampled:
-        f.write(json.dumps(item, ensure_ascii=False) + '\n')
-
-print(f'  → sample50: $SAMPLE50_ESLBENCH ({len(sampled)} 条)')
-diff_counts = {}
-for item in sampled:
-    d = item.get('eval', {}).get('difficulty', 'unknown')
-    diff_counts[d] = diff_counts.get(d, 0) + 1
-for d in sorted(diff_counts):
-    print(f'    {d}: {diff_counts[d]}')
-"
-fi
-
-# ============================================================
-# Step 5c: 上传 eslbench JSONL 到 ESL-Bench HF repo（可选）
-# ============================================================
-
-if [[ "$UPLOAD_ESLBENCH" == true ]]; then
-    ESLBENCH_JSONL_DIR="$HOLYEVAL_DIR/benchmark/data/eslbench"
-    ESLBENCH_JSONL_FILES=( $(find "$ESLBENCH_JSONL_DIR" -name "*-${DATE_TAG}.jsonl" -type f 2>/dev/null) )
-
-    if [[ ${#ESLBENCH_JSONL_FILES[@]} -gt 0 ]]; then
-        echo ""
-        echo "[Step 5c] 上传 eslbench JSONL 到 ESL-Bench ($ESLBENCH_REPO batch=$ESLBENCH_BATCH)..."
-        echo "  (自动去除内部字段: eval.evaluator/expected_value/key_points/source_data, target_overrides)"
-        cd "$HOLYEVAL_DIR"
-        for jf in "${ESLBENCH_JSONL_FILES[@]}"; do
-            BASENAME="$(basename "$jf")"
-            PATH_IN_REPO="data/${ESLBENCH_BATCH}/${BASENAME}"
-            echo "  上传: $BASENAME -> $PATH_IN_REPO"
-            STRIPPED_JSONL="$(mktemp)"
-            "$HOLYEVAL_VENV" -c "
-import json, sys
-with open('$jf') as f_in, open('$STRIPPED_JSONL', 'w') as f_out:
-    for line in f_in:
-        obj = json.loads(line)
-        # 删除 user.target_overrides
-        if 'user' in obj:
-            obj['user'].pop('target_overrides', None)
-        # 删除 eval 内部字段
-        if 'eval' in obj:
-            for k in ('evaluator', 'expected_value', 'key_points', 'source_data'):
-                obj['eval'].pop(k, None)
-        f_out.write(json.dumps(obj, ensure_ascii=False) + '\n')
-print(f'  stripped -> $STRIPPED_JSONL')
-"
-            "$HOLYEVAL_VENV" -c "
-from huggingface_hub import HfApi
-api = HfApi()
-api.upload_file(
-    path_or_fileobj='$STRIPPED_JSONL',
-    path_in_repo='$PATH_IN_REPO',
-    repo_id='$ESLBENCH_REPO',
-    repo_type='dataset',
-)
-print('  -> 完成')
-"
-            rm -f "$STRIPPED_JSONL"
-        done
+    # full-YYYYMMDD.jsonl: 仅不存在时生成
+    if [[ ! -f "$FULL_ESLBENCH" ]]; then
+        cp "$FULL_MID" "$FULL_ESLBENCH"
+        echo "  → 生成 $FULL_ESLBENCH ($(wc -l < "$FULL_ESLBENCH") 条)"
     else
-        echo ""
-        echo "[Step 5c] 未找到 eslbench/*-20260324.jsonl 文件，跳过"
+        echo "  → $FULL_ESLBENCH 已存在，跳过"
     fi
-else
-    echo ""
-    echo "[Step 5c] 跳过 eslbench JSONL 上传 (需要 --upload-eslbench)"
-fi
 
-# ============================================================
-# Step 6: 运行评测（在所有用户数据准备完成后）
-# ============================================================
-
-if [[ "$NO_EVAL" == true ]]; then
-    echo ""
-    echo "[Step 6] 跳过评测 (--no-eval)"
-    echo ""
-    echo "手动运行评测:"
-    echo "  cd $HOLYEVAL_DIR"
-    echo "  .venv/bin/python -m benchmark.basic_runner $BENCHMARK $DATASET --target-type llm_api --target-model $MODEL -p $PARALLELISM"
-else
-    echo ""
-    echo "[Step 6] 运行评测 ($MODEL + retrieve-tool)..."
-    echo "  并发: $PARALLELISM（大数据用户建议 -p 1 避免 OOM/segfault）"
-    echo "  如遇 segfault 可用 --resume 恢复:"
-    echo "    cd $HOLYEVAL_DIR"
-    echo "    .venv/bin/python -m benchmark.basic_runner $BENCHMARK $DATASET --target-type llm_api --target-model $MODEL -p $PARALLELISM --resume"
-    cd "$HOLYEVAL_DIR"
-    "$HOLYEVAL_VENV" -m benchmark.basic_runner "$BENCHMARK" "$DATASET" \
-        --target-type llm_api \
-        --target-model "$MODEL" \
-        -p "$PARALLELISM"
+    # 从 full_mid.jsonl 生成 sample50 + sample500
+    GEN_ESLBENCH_ARGS=(--jsonl "$FULL_MID" --seed "$SEED")
+    if [[ "$UPLOAD_ESLBENCH" == true ]]; then
+        GEN_ESLBENCH_ARGS+=(--upload-eslbench --eslbench-repo "$ESLBENCH_REPO" --eslbench-batch "$ESLBENCH_BATCH")
+    fi
+    if [[ "$NO_EVAL" != true ]]; then
+        GEN_ESLBENCH_ARGS+=(--eval --model "$MODEL" --benchmark "$BENCHMARK" --dataset "$DATASET" -p "$PARALLELISM")
+    fi
+    bash "$SCRIPT_DIR/gen_eslbench_jsonl.sh" "${GEN_ESLBENCH_ARGS[@]}"
 fi
 
 echo ""

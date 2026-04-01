@@ -1,4 +1,4 @@
-"""Task execution / progress / cancellation / checkpoint API"""
+"""Task execution / progress / cancellation API"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from evaluator.core.bench_schema import find_target_spec, resolve_runtime_target
 from evaluator.utils.benchmark_reader import list_benchmarks
 from evaluator.utils.checkpoint import CheckpointManager
-from web.app.models.responses import CheckpointSummary, EvalCheckRequest, EvalCheckResponse, EvalOnlyRequest, EvalOnlyResponse, TaskCreateRequest, TaskDetail, TaskSummary
+from web.app.models.responses import EvalCheckRequest, EvalCheckResponse, EvalOnlyRequest, EvalOnlyResponse, TaskCreateRequest, TaskDetail, TaskSummary
 from web.app.services.prepare_manager import prepare_manager
 from web.app.services.task_manager import task_manager
 
@@ -113,7 +113,8 @@ async def create_eval_only_task(req: EvalOnlyRequest):
 
 @router.get("/tasks", response_model=list[TaskSummary])
 async def list_tasks():
-    return [
+    # In-memory tasks (web-started)
+    result = [
         TaskSummary(
             task_id=e.task_id,
             benchmark=e.benchmark,
@@ -128,13 +129,39 @@ async def list_tasks():
         for e in task_manager.list_tasks()
     ]
 
+    # Discover external tasks (CLI-started or orphaned web tasks) from disk registry
+    web_task_ids = {e.task_id for e in result}
+    for reg in task_manager.discover_external_tasks():
+        if reg.task_id in web_task_ids:
+            continue
+        rt = reg.runtime_target or {}
+        completed = CheckpointManager.completed_count(reg.checkpoint_session_id) if reg.status == "running" else reg.total
+        result.append(
+            TaskSummary(
+                task_id=reg.task_id,
+                benchmark=reg.benchmark,
+                dataset=reg.dataset,
+                target_type=rt.get("type"),
+                target_model=rt.get("model"),
+                status=reg.status,
+                total=reg.total,
+                completed=completed,
+                created_at=reg.created_at,
+            )
+        )
+
+    return result
+
 
 @router.get("/tasks/{task_id}", response_model=TaskDetail)
 async def get_task(task_id: str):
     try:
         snapshot = task_manager.get_snapshot(task_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+        # Fall back to CLI task from disk registry
+        snapshot = task_manager.get_cli_snapshot(task_id)
+        if not snapshot:
+            raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
     return TaskDetail(
         task_id=snapshot["id"],
@@ -155,26 +182,50 @@ async def get_task(task_id: str):
 
 @router.get("/tasks/{task_id}/cases/{case_id}")
 async def get_case_result(task_id: str, case_id: str):
-    """Get real-time result for a single case (from running CaseContext or completed result)"""
-    from web.app.services.task_manager import read_live_file
+    """Get real-time result for a single case (from running CaseContext, live file, or report)"""
+    from evaluator.utils.live_files import read_live_file
 
     entry = task_manager.get_task(task_id)
-    if not entry:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
-    if not entry.session:
-        raise HTTPException(status_code=410, detail="Task completed, view results in reports")
-    ctx = entry.session.contexts.get(case_id)
-    if not ctx:
-        raise HTTPException(status_code=404, detail=f"Case not found: {case_id}")
-    if ctx.result:
-        return {"status": ctx.status.value, "result": ctx.result.model_dump(mode="json")}
+    if entry:
+        # Web-managed task: try in-memory session first
+        if entry.session:
+            ctx = entry.session.contexts.get(case_id)
+            if not ctx:
+                raise HTTPException(status_code=404, detail=f"Case not found: {case_id}")
+            if ctx.result:
+                return {"status": ctx.status.value, "result": ctx.result.model_dump(mode="json")}
+            live_data = read_live_file(task_id, case_id)
+            if live_data:
+                return {"status": ctx.status.value, "result": live_data}
+            return {"status": ctx.status.value, "result": None}
+        else:
+            raise HTTPException(status_code=410, detail="Task completed, view results in reports")
 
-    # Running case -- read conversation data from live file
+    # External task (CLI or orphaned web): read from live file or checkpoint
+    from evaluator.utils.task_registry import read_task_entry
+    reg = read_task_entry(task_id)
+    if not reg:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+
     live_data = read_live_file(task_id, case_id)
     if live_data:
-        return {"status": ctx.status.value, "result": live_data}
+        return {"status": "dialogue", "result": live_data}
 
-    return {"status": ctx.status.value, "result": None}
+    # Try loading completed result from checkpoint
+    try:
+        _, completed_results = CheckpointManager.load(reg.checkpoint_session_id)
+        for r in completed_results:
+            if r.id == case_id:
+                return {"status": "completed", "result": r.model_dump(mode="json")}
+    except FileNotFoundError:
+        pass
+
+    # No data available — return empty trace so frontend doesn't show "Loading..." forever
+    return {"status": "pending", "result": {
+        "id": case_id,
+        "eval": {"result": None, "score": None, "feedback": None, "trace": {"history": [], "test_memory": [], "target_memory": []}},
+        "_no_data": True,
+    }}
 
 
 @router.get("/tasks/{task_id}/results")
@@ -184,30 +235,36 @@ async def get_task_results(
     page_size: int = 20,
     tag: str | None = None,
 ):
-    """Get paginated evaluation results for a task (from memory or report file)"""
+    """Get paginated evaluation results for a task (from memory, report file, or CLI registry)"""
     entry = task_manager.get_task(task_id)
-    if not entry:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
     # Collect results list
     results: list[dict] = []
-    if entry.eval_results:
-        results = [r.model_dump(mode="json") for r in entry.eval_results]
-    elif entry.session and entry.status == "completed":
-        # Collect from session contexts
-        for ctx in entry.session.contexts.values():
-            if ctx.result:
-                results.append(ctx.result.model_dump(mode="json"))
-        # Merge resumed results
-        for r in entry.resumed_results:
-            results.append(r.model_dump(mode="json"))
-    elif entry.report_path:
-        # Read from report file
-        import json
-        from pathlib import Path
+    report_path: str | None = None
 
+    if entry:
+        if entry.eval_results:
+            results = [r.model_dump(mode="json") for r in entry.eval_results]
+        elif entry.session and entry.status == "completed":
+            for ctx in entry.session.contexts.values():
+                if ctx.result:
+                    results.append(ctx.result.model_dump(mode="json"))
+            for r in entry.resumed_results:
+                results.append(r.model_dump(mode="json"))
+        else:
+            report_path = entry.report_path
+    else:
+        # CLI task: try registry
+        from evaluator.utils.task_registry import read_task_entry
+        reg = read_task_entry(task_id)
+        if not reg:
+            raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+        report_path = reg.report_path
+
+    if not results and report_path:
+        import json
         try:
-            with open(entry.report_path, "r", encoding="utf-8") as f:
+            with open(report_path, "r", encoding="utf-8") as f:
                 report_data = json.load(f)
             results = report_data.get("cases", [])
         except (FileNotFoundError, json.JSONDecodeError):
@@ -239,71 +296,18 @@ async def cancel_task(task_id: str):
     try:
         task_manager.cancel_task(task_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+        # Check if it's a CLI task
+        from evaluator.utils.task_registry import read_task_entry, is_process_alive
+        import signal
+        reg = read_task_entry(task_id)
+        if not reg:
+            raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+        if reg.status != "running":
+            raise HTTPException(status_code=400, detail=f"Task is not running (status: {reg.status})")
+        # Send SIGINT to CLI process for graceful cancellation
+        if reg.pid and is_process_alive(reg.pid):
+            import os
+            os.kill(reg.pid, signal.SIGINT)
+            return {"status": "cancelling", "task_id": task_id, "source": "cli"}
+        raise HTTPException(status_code=400, detail="CLI process is no longer alive")
     return {"status": "cancelling", "task_id": task_id}
-
-
-# ==================== Checkpoint API ====================
-
-
-@router.get("/checkpoints", response_model=list[CheckpointSummary])
-async def list_checkpoints(benchmark: str | None = None):
-    """List resumable checkpoints"""
-    checkpoints = task_manager.list_checkpoints(benchmark)
-    return [
-        CheckpointSummary(
-            session_id=cp.session_id,
-            benchmark=cp.benchmark,
-            dataset=cp.dataset,
-            target_type=cp.target_type,
-            case_count=len(cp.case_ids),
-            completed_count=CheckpointManager.completed_count(cp.session_id),
-            started_at=cp.started_at,
-        )
-        for cp in checkpoints
-    ]
-
-
-@router.post("/checkpoints/{session_id}/resume", response_model=TaskSummary)
-async def resume_checkpoint(session_id: str):
-    """Resume a checkpoint task"""
-    try:
-        meta, _ = CheckpointManager.load(session_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Checkpoint not found: {session_id}")
-
-    # Find TargetSpec
-    benchmarks = list_benchmarks()
-    bm = next((b for b in benchmarks if b.name == meta.benchmark), None)
-    if not bm:
-        raise HTTPException(status_code=400, detail=f"Benchmark not found: '{meta.benchmark}'")
-
-    try:
-        spec = find_target_spec(bm.target, meta.target_type)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    try:
-        entry = await task_manager.resume_task(session_id, spec)
-    except (FileNotFoundError, ValueError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return TaskSummary(
-        task_id=entry.task_id,
-        benchmark=entry.benchmark,
-        dataset=entry.dataset,
-        target_type=entry.runtime_target.type,
-        target_model=getattr(entry.runtime_target, "model", None),
-        status=entry.status,
-        total=entry.session.total + len(entry.resumed_results),
-        completed=len(entry.resumed_results),
-        created_at=entry.created_at,
-    )
-
-
-@router.delete("/checkpoints/{session_id}")
-async def delete_checkpoint(session_id: str):
-    """Delete a checkpoint (abandon resume)"""
-    mgr = CheckpointManager(session_id)
-    mgr.cleanup()
-    return {"status": "deleted", "session_id": session_id}

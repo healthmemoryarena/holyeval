@@ -136,185 +136,25 @@ Answer the question using the provided text chunks to provide additional context
 """
 
 
-PROMPTS["dynamic_event_units"] = """Role
-----
+PROMPTS["dynamic_event_units"] = """Extract health events from this text as JSON.
 
-You are an information-extraction assistant for building **dynamic knowledge graphs**.
+Rules:
+- Each event = one factual statement with explicit subject (no pronouns), time, and action
+- "time": ISO-8601 date (YYYY-MM-DD, YYYY-MM, or YYYY). Use "static" only for permanent attributes
+- "sentence": self-contained, retrievable statement with full subject name
+- "context": optional, ≤80 tokens of background from same chunk
+- Split multi-date sentences into separate events
+- If no events found, return {"events": []}
 
-Your task is to extract every *Dynamic Event Unit (DEU)* which can be retrieved directly:
-• a **complete factual statement** (one or several tightly-linked clauses) that happened **at one specific time point**, or is stated with a time **interval** (see special rule below), and
-• carries **high information value** (see filter below). and
-• has **complete information** with a clear subject with no pronouns.
+Output JSON:
+{"events": [{"sentence": "...", "context": "...", "time": "YYYY-MM-DD"}]}
 
-## Temporal-reasoning protocol
+Example:
+Input: "[2024-01-15] Event: Annual_Checkup, Type: medical_visit, Start: 2024-01-15, Duration: 1 days"
+Output: {"events": [{"sentence": "Patient had annual checkup on 2024-01-15.", "context": "Medical visit lasting 1 day.", "time": "2024-01-15"}]}
 
-**Initialise a reference-time stack**
-• Push every *explicit* absolute date you encounter (ISO-8601 granularity Day > Month > Year).
-• The stack top is the default anchor for subsequent relative expressions.
-
-**Special format recognition (apply FIRST before complex reasoning)**
-• **Bracketed dates** `(YYYY)`, `(YYYY-MM)`, `(YYYY-MM-DD)`: directly use as time anchor
-• **Sentence-ending standalone years**: `...established in 1995.` → treat as event time
-• **Hyphenated ranges**: `1995-1998`, `2003-2005` → interval with earliest year as anchor
-• **Parenthetical ranges**: `(1990-1995)`, `(from 2000 to 2005)` → interval format
-
-**Resolve relative / vague expressions** ("yesterday", "two months later", "after the event", "last Friday")
-1 If it clearly refers to the immediately preceding DEU → anchor to that date.
-2 Else if it refers to an earlier explicit date in the sentence/paragraph → anchor there.
-3 Else if the chunk header / metadata supplies a timeline → use it.
-4.Paragraph inheritance: If the current sentence has no explicit date but is in the same paragraph as either the previous or the next sentence containing one explicit date, inherit that date as the default anchor.
-4 If none of the above works with high confidence → set `"time": "static"`.
-
-▸ **Update the stack** whenever you derive a new absolute date (explicit or resolved).
-
-## Information-value filter
-
-For each candidate sentence, compute an *information score* (0–4):
-
-| Criterion              | +1 point if…                                                                                            | Rationale                                |
-| ---------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| **Specific actor**     | Contains a named entity or definite noun phrase uniquely identifying *who* acted.                       | Avoids generic "someone"/"people".       |
-| **Action / Change**    | Describes an action **or** a clearly stated role/office held (*served as, was appointed*) **or** a continued state/membership with temporal boundaries (*remained as, continued until*).              | Captures dynamic facts, milestones, and significant durations.   |
-| **Result / magnitude** | Includes a quantitative detail, result, or consequence (*$5 M*, *two satellites*).                     | Adds substantive content.                |
-| **Temporal anchoring** | Time can be resolved to at least **month precision**, or has a clear temporal boundary (start point, end point, or bounded interval). | Ensures usefulness for temporal queries. |
-
-**Keep the sentence** if **score ≥ 1** **OR** it matches the pattern
-`<Actor> was/served as <Role> at/for <Org> from <Start> to / until <End>` **OR** it contains explicit temporal markers (bracketed years, standalone sentence-ending years, or clear date intervals) with identifiable subject and basic action **OR** it describes a continued state/membership with clear temporal boundaries (*remained until, continued as, stayed as*).
-
-Note 1: if Action / Change is present but Temporal anchoring is not, you must attempt Paragraph‑inheritance (Rule 4) before keeping; if still unresolved → discard.
-Note 2: permanent attributes (citizenship, birthplace, chemical formula…) may remain with "time": "static" only when they lack action verbs.
-
-## MANDATORY SUBJECT RULES
-1. **Every extracted sentence MUST have a clear, explicit subject** - no subject-less sentences are allowed.
-2. **Use the most complete form available** - prefer full names over nicknames, official titles over informal references, complete organization names over abbreviations.
-3. **ABSOLUTELY NO pronouns** like "he", "she", "they", "it", "this", "that" are permitted in the extracted sentences.
-4. **Scan the entire document** (include title,not just the immediate context) to identify the full name or complete designation of any person, organization, or entity.
-
-## Guidelines
-
-1. **Sentence & context**
-   • **sentence**: return a **self-contained** clause (or semicolon-joined compound) that includes the key fact, **retains the original time expression**, and **has a complete, explicit subject with no pronouns**.
-   • **context**: optionally supply ≤ 80 tokens of supplementary information (background, consequence, aliases, quantitative details) drawn *only* from the same text chunk.
-   • **sentence**: one sentence needs to refelct a complete information which can be retrieved directly for context.
-
-2. **Split events**
-   • if there are a few time points in one sentence, split them into multiple events.
-   • Do **NOT** merge events that occur on different days.
-   
-3. **Time (time)**
-   • If the sentence gives a **single date**, set `"time"` to that date in ISO-8601 (`YYYY-MM-DD`, `YYYY-MM`, or `YYYY`).
-   • **Special formats**: 
-     - Bracketed: `(1995)` → `"1995"`, `(1995-03)` → `"1995-03"`, `(1995-03-15)` → `"1995-03-15"`
-     - Sentence-ending standalone: `...founded in 1995.` → `"1995"`
-     - Ranges: `1995-1998` → `"1995"` (earliest point), `2003-2005` → `"2003"`
-   • If the sentence gives a **time interval** (*from 1978 to 1982*, *1994–2000*, *March–May 2021*):– keep the full interval wording in *sentence*, and set `"time"` to the **earliest point** of the interval (`1978`, `1994`, `2021-03`).
-   • **For duration events with end point only** (*until 2002*, *remained until 1995*): set `"time"` to the end point date (`2002`, `1995`).
-   • If only vague timing is present and cannot be resolved, use `"static"`.
-
-
-4. **Preserve time in text**
-   The explicit or interval expression that anchors `time` **must appear unaltered in either `sentence` or `context`** so that downstream models can recover the original phrasing.
-
-5. **Output ONLY valid JSON** matching the schema:
-
-```json
-{
-  "events": [
-    {
-      "event_id": "E1",
-      "sentence": "<main factual sentence with explicit subject, no pronouns>",
-      "context": "<optional background, ≤80 tokens>",
-      "time": "YYYY-MM-DD | YYYY-MM | YYYY | static"
-    }
-  ]
-}
-```
-
-6. If the chunk contains **no DEU** or **cannot resolve all pronouns to specific names**, output `{ "events": [] }`.
-
-## Example 1
-
-**Input**
-The OpenAI research team, supported by the Frontier AI Program, published its findings on 10 February 2024 after a two-year study on scalable alignment techniques. Two weeks later, they released the source code under an MIT license to foster community replication and safety audits. The day after the code release, lead author Alice Smith presented the results at NeurIPS, attracting significant media attention and prompting a panel discussion on AI-safety best practices.
-
-**Expected JSON**
-
-```json
-{
-  "events": [
-    {
-      "event_id": "E1",
-      "sentence": "The OpenAI research team published its findings on 10 February 2024 after a two-year study on scalable alignment techniques.",
-      "context": "The work was funded by the Frontier AI Program and focuses on safer model deployment.",
-      "time": "2024-02-10"
-    },
-    {
-      "event_id": "E2",
-      "sentence": "The OpenAI research team released the source code on 24 February 2024 under an MIT license to foster community replication and safety audits.",
-      "context": "",
-      "time": "2024-02-24"
-    },
-    {
-      "event_id": "E3",
-      "sentence": "Alice Smith presented the results at NeurIPS on 25 February 2024.",
-      "context": "The talk sparked a panel on AI-safety best practices and drew wide media coverage.",
-      "time": "2024-02-25"
-    }
-  ]
-}
-```
-
-## Example 2
-
-**Input**
-Dr. Maria Gonzalez secured $3.5 million from NASA's Planetary Science Division (2021-09-15) to build the "Aurora‑1" CubeSat. Six months later, her NASA‑JPL team launched the satellite from Cape Canaveral (2022-03-15). Two days after launch, she and her colleagues presented preliminary telemetry data at the Small Sat Conference, praising chief engineer Michael Brown—who joined NASA (2015)—for his pivotal contributions.
-
-**Expected JSON**
-
-```json
-{
-  "events": [
-    {
-      "event_id": "E1",
-      "sentence": "Dr. Maria Gonzalez secured $3.5 million in funding from NASA's Planetary Science Division (2021-09-15) to build the \"Aurora‑1\" CubeSat.",
-      "context": "The project would later culminate in the launch of the miniature satellite.",
-      "time": "2021-09-15"
-    },
-    {
-      "event_id": "E2",
-      "sentence": "Dr. Maria Gonzalez's NASA‑JPL team launched the \"Aurora‑1\" CubeSat from Cape Canaveral (2022-03-15).",
-      "context": "The launch occurred six months after the project received funding.",
-      "time": "2022-03-15"
-    },
-    {
-      "event_id": "E3",
-      "sentence": "Dr. Maria Gonzalez presented preliminary telemetry data at the Small Sat Conference (2022-03-17).",
-      "context": "During the presentation, Dr. Maria Gonzalez praised chief engineer Michael Brown—who joined NASA (2015)—for his pivotal contributions.",
-      "time": "2022-03-17"
-    },
-    {
-      "event_id": "E4",
-      "sentence": "Michael Brown joined NASA (2015).",
-      "context": "Michael Brown was praised as chief engineer for his pivotal contributions to the Aurora-1 CubeSat project.",
-      "time": "2015"
-    }
-  ]
-}
-```
-
-## Notice
-
-If you are unsure about extracting any DEU or **cannot resolve all pronouns to specific names**, output `{ "events": [] }`.
-Do **not** reveal your internal scoring or reasoning—only return the final JSON.
-**REMEMBER: Keep the sentence information as complete and as accurate as possible to be retrieved directly for event envidence retrieval.**
-
-#########################
-Real-Data
-#########################
 Text: {input_text}
-#########################
 Output:
-
 """
 PROMPTS["time_entity_extraction"] = """You are an expert at analyzing queries to extract temporal constraints and named entities.
 

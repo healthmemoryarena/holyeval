@@ -39,7 +39,7 @@ _global_gemini_call_sem: asyncio.Semaphore | None = None
 _global_gemini_embedding_sem: asyncio.Semaphore | None = None
 
 # Gemini API 调用超时（秒），防止 SSL 连接卡死
-GEMINI_CALL_TIMEOUT = 120.0
+GEMINI_CALL_TIMEOUT = float(os.environ.get("GEMINI_CALL_TIMEOUT", "120"))
 
 # 全局线程池，使用 daemon 线程以便超时后不阻塞进程退出
 _gemini_thread_pool: ThreadPoolExecutor | None = None
@@ -185,12 +185,27 @@ def _create_http_options():
     """
     创建 Google GenAI Client 的 http_options 配置。
 
-    注意：不要设置 timeout，SDK 会将其误解为 gRPC deadline 导致请求失败。
+    注意：不要在 HttpOptions 上设置 timeout，SDK 会将其误解为 gRPC deadline 导致请求失败。
+    但 httpx.Client 自身的 timeout 和 limits 是安全的，用于控制底层连接行为。
     """
+    import httpx
     genai, types = _import_google_genai()
 
-    # 只设置基本配置，不设置 timeout（SDK 默认值足够）
-    http_options = types.HttpOptions()
+    proxy = os.getenv("GEMINI_PROXY", "")
+
+    _timeout = httpx.Timeout(connect=30.0, read=300.0, write=60.0, pool=30.0)
+    _limits = httpx.Limits(max_connections=20, max_keepalive_connections=10, keepalive_expiry=30)
+
+    if proxy:
+        http_options = types.HttpOptions(
+            httpxClient=httpx.Client(proxy=proxy, timeout=_timeout, limits=_limits),
+            httpxAsyncClient=httpx.AsyncClient(proxy=proxy, timeout=_timeout, limits=_limits),
+        )
+    else:
+        http_options = types.HttpOptions(
+            httpxClient=httpx.Client(timeout=_timeout, limits=_limits),
+            httpxAsyncClient=httpx.AsyncClient(timeout=_timeout, limits=_limits),
+        )
 
     return http_options
 
@@ -346,9 +361,15 @@ def _load_all_gemini_api_keys() -> List[str]:
             if value and value.strip():
                 keys.append(value.strip())
 
-    # 如果没有找到多 key，则使用单个 GEMINI_API_KEY
+    # 如果找到多 key，清除 GOOGLE_API_KEY 防止 google-genai SDK 劫持
+    # （SDK 发现 GOOGLE_API_KEY 会忽略传入的 api_key 参数）
+    if keys and os.environ.get("GOOGLE_API_KEY"):
+        logger.info("检测到多 key 模式，清除 GOOGLE_API_KEY 防止 SDK 劫持")
+        os.environ.pop("GOOGLE_API_KEY", None)
+
+    # 如果没有找到多 key，则使用单个 GEMINI_API_KEY 或 GOOGLE_API_KEY
     if not keys:
-        single_key = os.getenv("GEMINI_API_KEY")
+        single_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if single_key and single_key.strip():
             keys.append(single_key.strip())
 
@@ -568,10 +589,10 @@ def get_gemini_client_instance(
     _load_dotenv_if_present()
 
     if global_gemini_client is None:
-        resolved_key = api_key or os.getenv("GEMINI_API_KEY")
+        resolved_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not resolved_key:
             raise ValueError(
-                "缺少 Gemini API Key：请设置环境变量 GEMINI_API_KEY 或传入 api_key"
+                "缺少 Gemini API Key：请设置环境变量 GEMINI_API_KEY / GOOGLE_API_KEY 或传入 api_key"
             )
 
         global_gemini_client = GeminiClient(
@@ -601,9 +622,9 @@ def get_google_genai_raw_client_instance(*, api_key: Optional[str] = None):
     _load_dotenv_if_present()
 
     if global_google_genai_raw_client is None:
-        resolved_key = api_key or os.getenv("GEMINI_API_KEY")
+        resolved_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not resolved_key:
-            raise ValueError("缺少 GEMINI_API_KEY（用于 Gemini embeddings）")
+            raise ValueError("缺少 GEMINI_API_KEY / GOOGLE_API_KEY（用于 Gemini embeddings）")
         genai, _ = _import_google_genai()
         global_google_genai_raw_client = genai.Client(api_key=resolved_key, http_options=_create_http_options())
 
@@ -697,7 +718,7 @@ async def gemini_complete_if_cache(
     if temperature is not None:
         gen_cfg["temperature"] = temperature
     # 结构化输出（response_json_schema）与 thinking_config 组合会导致 Gemini 极慢/超时，跳过 thinking
-    if thinking_level is not None and response_json_schema is None:
+    if thinking_level is not None and thinking_level.lower() not in ("none", "") and response_json_schema is None:
         gen_cfg["thinking_config"] = {"thinking_level": thinking_level}
 
     # 优先使用多 key client（如果配置了多个 key）
@@ -720,6 +741,8 @@ async def gemini_complete_if_cache(
 
         async def _call_raw_async() -> str:
             # 使用原生异步 API，避免同步线程池阻塞（超时后线程不释放导致线程池耗尽）
+            import time as _time
+            _t0 = _time.monotonic()
             resp = await asyncio.wait_for(
                 raw_client.aio.models.generate_content(
                     model=model,
@@ -728,25 +751,37 @@ async def gemini_complete_if_cache(
                 ),
                 timeout=GEMINI_CALL_TIMEOUT,
             )
+            _elapsed = _time.monotonic() - _t0
+            logger.info(f"[DIAG] generate_content returned in {_elapsed:.1f}s (prompt {len(packed)} chars)")
             # 直接取 text（schema + application/json 应保证是纯 JSON 文本）
             if hasattr(resp, "text") and isinstance(resp.text, str) and resp.text:
                 return resp.text
             return GeminiClient._extract_text(resp)
 
         # 多 key 模式使用各自的 semaphore，单 key 模式使用全局 semaphore
+        import time as _time
+        _sem_wait_start = _time.monotonic()
         try:
             if use_multi_key and raw_sem is not None:
                 async with raw_sem:
+                    _sem_waited = _time.monotonic() - _sem_wait_start
+                    if _sem_waited > 1.0:
+                        logger.warning(f"[DIAG] Waited {_sem_waited:.1f}s for raw_sem")
                     result = await _call_raw_async()
             else:
                 sem = _get_global_gemini_call_semaphore()
                 async with sem:
+                    _sem_waited = _time.monotonic() - _sem_wait_start
+                    if _sem_waited > 1.0:
+                        logger.warning(f"[DIAG] Waited {_sem_waited:.1f}s for global_sem")
                     result = await _call_raw_async()
         except asyncio.TimeoutError:
-            raise TimeoutError(f"Gemini API 调用超时 ({GEMINI_CALL_TIMEOUT}s)")
+            _total_waited = _time.monotonic() - _sem_wait_start
+            raise TimeoutError(f"Gemini API 调用超时 ({GEMINI_CALL_TIMEOUT}s, total_waited={_total_waited:.1f}s)")
     else:
         # 若调用方显式指定了 thinking_level，构造 config 覆盖 client 默认值
-        plain_config = {"thinking_config": {"thinking_level": thinking_level}} if thinking_level else None
+        _skip_thinking = not thinking_level or thinking_level.lower() in ("none", "")
+        plain_config = {} if _skip_thinking else {"thinking_config": {"thinking_level": thinking_level}}
         if use_multi_key and multi_client is not None:
             # 多 key 模式：通过 MultiKeyGeminiClient 的 generate 方法（内部轮询 + 并发控制）
             result = await multi_client.generate(packed, model=model, config=plain_config)
@@ -811,9 +846,9 @@ async def gemini_cheap_complete(
     """
     默认 cheap LLM：Gemini（模型名从环境变量 GEMINI_CHEAP_MODEL 读取）
     """
-    model = os.getenv("GEMINI_CHEAP_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_CHEAP_MODEL", "gemini-3-flash-preview")
     # 便宜模型默认用 low 思考强度，可通过 GEMINI_CHEAP_THINKING_LEVEL 覆盖
-    cheap_thinking = os.getenv("GEMINI_CHEAP_THINKING_LEVEL", "low")
+    cheap_thinking = os.getenv("GEMINI_CHEAP_THINKING_LEVEL", "none")
     kwargs.setdefault("thinking_level", cheap_thinking)
     return await gemini_complete_if_cache(
         model,
