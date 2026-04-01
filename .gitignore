@@ -27,10 +27,13 @@ Thumbs.db
 benchmark/report/**/*.json
 benchmark/report/.checkpoints/
 benchmark/report/.live/
+benchmark/report/.tasks/
 # Benchmark prepare data (runtime generated)
 benchmark/data/**/.data/
 benchmark/data/**/.dyg_work_dirs/
 benchmark/data/**/.hippo_work_dirs/
+benchmark/data/**/.evermem_work_dirs/
+benchmark/data/**/.mem0_work_dirs/
 logs/
 # Testing
 .pytest_cache/

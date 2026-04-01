@@ -341,19 +341,11 @@ async def _build_or_get_index(
     if not docs:
         raise FileNotFoundError(f"User data directory is empty: {user_dir}")
 
-    # --- Disk cache check (auto-download from HuggingFace if no cache) ---
+    # --- Disk cache check ---
     work_dir = user_dir.parent.parent / ".hippo_work_dirs" / user_dir.name
     meta_file = work_dir / "index_meta.json"
     chunks_file = work_dir / "chunks.json"
     emb_file = work_dir / "chunk_embeddings.npz"
-
-    if not meta_file.exists():
-        try:
-            from generator.eslbench.prepare_hippo_cache import download_hippo_cache
-            logger.info("[HippoRAG] 本地无缓存, 尝试从 HuggingFace 下载预构建缓存...")
-            download_hippo_cache()
-        except Exception as e:
-            logger.warning("[HippoRAG] 下载预构建缓存失败, 将从头构建: %s", e)
 
     current_hash = _chunks_hash(docs)
 

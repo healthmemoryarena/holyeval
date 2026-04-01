@@ -107,15 +107,3 @@ class EvalOnlyResponse(BaseModel):
 class ReportListResponse(BaseModel):
     reports: list[ReportEntry]
 
-
-# ==================== Checkpoint (Web-specific) ====================
-
-
-class CheckpointSummary(BaseModel):
-    session_id: str
-    benchmark: str
-    dataset: str
-    target_type: str
-    case_count: int  # Total number of cases
-    completed_count: int  # Number of completed cases
-    started_at: str

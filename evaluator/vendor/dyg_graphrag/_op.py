@@ -184,7 +184,7 @@ async def _gemini_extract_entities_for_sentences(
 
     NER_MAX_RETRIES = 3
     NER_RETRY_BASE_DELAY = 5.0
-    NER_CONCURRENCY = 50  # 与 _llm.py 的 MultiKeyGeminiClient 总并发数匹配
+    NER_CONCURRENCY = 4  # 控制 NER batch 并发，避免 API 排队超时
     ner_sem = asyncio.Semaphore(NER_CONCURRENCY)
 
     async def _run_one_batch(start_idx: int, batch: List[str]) -> tuple[int, List[List[str]]]:
@@ -211,7 +211,6 @@ async def _gemini_extract_entities_for_sentences(
                     raw = await llm_func(
                         prompt,
                         response_mime_type="application/json",
-                        response_json_schema=schema,
                         temperature=0,
                     )
                     break
@@ -224,8 +223,8 @@ async def _gemini_extract_entities_for_sentences(
                         )
                         await asyncio.sleep(delay)
                     else:
-                        logger.error(f"NER batch (start={start_idx}) failed after all retries: {e}")
-                        raise
+                        logger.error(f"NER batch (start={start_idx}) failed after all retries, skipping: {e}")
+                        return (start_idx, [[] for _ in batch])
 
             if isinstance(raw, list):
                 raw = raw[0].get("text", "")
@@ -237,7 +236,13 @@ async def _gemini_extract_entities_for_sentences(
                     f"NER batch (start={start_idx}) returned invalid JSON: {e}"
                 ) from e
 
-            results = data.get("results", [])
+            # 兼容：无 schema 时 Gemini 可能直接返回 list 或 {"results": [...]}
+            if isinstance(data, list):
+                results = data
+            elif isinstance(data, dict):
+                results = data.get("results", [])
+            else:
+                results = []
             if not isinstance(results, list):
                 raise RuntimeError(
                     f"NER batch (start={start_idx}) returned unexpected format: missing 'results' list"
@@ -743,7 +748,7 @@ async def extract_events(
     CHUNK_MAX_RETRIES = int(global_config.get("chunk_max_retries", 3))
     CHUNK_RETRY_BASE_DELAY = float(global_config.get("chunk_retry_base_delay", 5.0))
     # chunk 级总超时（秒），防止单个 chunk 无限重试阻塞整体进度
-    CHUNK_TOTAL_TIMEOUT = float(global_config.get("chunk_total_timeout", 600.0))  # 10 分钟
+    CHUNK_TOTAL_TIMEOUT = float(global_config.get("chunk_total_timeout", 180.0))  # 3 分钟
 
     async def _process_events_only(chunk_key_dp: tuple[str, TextChunkSchema]):
         nonlocal already_processed, already_events, failed_chunks
@@ -768,7 +773,6 @@ async def extract_events(
                         current_event_result = await use_llm_func(
                             event_hint_prompt,
                             response_mime_type="application/json",
-                            response_json_schema=event_schema,
                             temperature=0,
                         )
                     else:
@@ -803,8 +807,10 @@ async def extract_events(
             event_history = pack_user_ass_to_openai_messages(event_hint_prompt, current_event_result, using_amazon_bedrock)
             combined_event_data = {"events": []} 
 
-            # 严格模式：不做任何稳健/修复处理，解析失败直接抛错
             parsed_data = json.loads(current_event_result)
+            # 兼容：无 schema 时 Gemini 可能返回 list 或 {"events": [...]}
+            if isinstance(parsed_data, list):
+                parsed_data = {"events": parsed_data}
             if not (isinstance(parsed_data, dict) and "events" in parsed_data):
                 raise ValueError(f"Invalid events JSON schema for chunk {chunk_key}")
             combined_event_data["events"].extend(parsed_data["events"])
@@ -818,7 +824,6 @@ async def extract_events(
                         event_extract_continue_prompt,
                         history_messages=event_history,
                         response_mime_type="application/json",
-                        response_json_schema=event_schema,
                         temperature=0,
                     )
                 else:
@@ -831,6 +836,8 @@ async def extract_events(
                 event_history += pack_user_ass_to_openai_messages(event_extract_continue_prompt, glean_event_result, using_amazon_bedrock)
                 
                 gleaned_data = json.loads(glean_event_result)
+                if isinstance(gleaned_data, list):
+                    gleaned_data = {"events": gleaned_data}
                 if not (isinstance(gleaned_data, dict) and "events" in gleaned_data):
                     raise ValueError(
                         f"Invalid gleaned events JSON schema for chunk {chunk_key}"
@@ -845,7 +852,6 @@ async def extract_events(
                         event_extract_if_loop_prompt,
                         history_messages=event_history,
                         response_mime_type="application/json",
-                        response_json_schema=loop_schema,
                         temperature=0,
                     )
                     if isinstance(loop_raw, list):
@@ -932,21 +938,25 @@ async def extract_events(
 
     event_extraction_start = time.time()
 
+    extraction_concurrency = int(global_config.get("event_extraction_concurrency", 4))
+    extraction_sem = asyncio.Semaphore(extraction_concurrency)
+
     async def _process_with_timeout(chunk_key_dp):
-        """为单个 chunk 添加总超时控制"""
-        try:
-            return await asyncio.wait_for(
-                _process_events_only(chunk_key_dp),
-                timeout=CHUNK_TOTAL_TIMEOUT
-            )
-        except asyncio.TimeoutError:
-            nonlocal failed_chunks
-            failed_chunks += 1
-            chunk_key = chunk_key_dp[0]
-            logger.error(f"Chunk {chunk_key} processing timed out after {CHUNK_TOTAL_TIMEOUT}s, skipping")
-            if event_pbar is not None:
-                event_pbar.update(1)
-            return {}
+        """为单个 chunk 添加总超时控制 + 并发限流"""
+        async with extraction_sem:
+            try:
+                return await asyncio.wait_for(
+                    _process_events_only(chunk_key_dp),
+                    timeout=CHUNK_TOTAL_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                nonlocal failed_chunks
+                failed_chunks += 1
+                chunk_key = chunk_key_dp[0]
+                logger.error(f"Chunk {chunk_key} processing timed out after {CHUNK_TOTAL_TIMEOUT}s, skipping")
+                if event_pbar is not None:
+                    event_pbar.update(1)
+                return {}
 
     try:
         event_results = await asyncio.gather(
@@ -1328,7 +1338,7 @@ async def batch_process_event_relationships_multiprocess(
 
     with ProcessPoolExecutor(max_workers=max_workers, mp_context=mp_context) as executor:
         batch_results = list(tqdm(
-            executor.map(compute_event_relationships_batch, batches),
+            executor.map(compute_event_relationships_batch, batches, timeout=300),
             total=len(batches),
             desc="Event relationships"
         ))
