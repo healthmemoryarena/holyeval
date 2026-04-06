@@ -635,15 +635,19 @@ class TaskManager:
                 completed_count += 1
 
         # Check live files for in-progress cases
-        from evaluator.utils.live_files import LIVE_DIR
+        from evaluator.utils.live_files import LIVE_DIR, read_live_file
         live_dir = LIVE_DIR / task_id
         if live_dir.is_dir():
             for live_file in live_dir.glob("*.json"):
                 cid = live_file.stem
+                # Distinguish init-only files (pending) from real in-progress files
+                live_data = read_live_file(task_id, cid)
+                is_init_only = live_data.get("_init", False) if live_data else False
+                if is_init_only:
+                    continue  # Still pending, not yet started
                 if cid in cases and cases[cid]["status"] == "pending":
                     cases[cid]["status"] = "dialogue"
                 elif cid not in cases:
-                    # Case found in live files but not in case_ids (e.g. filtered by --ids)
                     cases[cid] = {"status": "dialogue", "turn": 0, "title": cid, "tags": []}
 
         snap: dict[str, Any] = {

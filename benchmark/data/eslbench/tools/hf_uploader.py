@@ -22,7 +22,6 @@ import tempfile
 
 from huggingface_hub import HfApi
 
-
 def _id_match(val, raw_id) -> bool:
     """比较 JSON 中的值与 raw_id，兼容 str/int 混合类型。"""
     if val is None or raw_id is None:
@@ -114,9 +113,9 @@ def upload_user(repo_id: str, batch: str, user_dir: str, dir_name: str, kg_query
             else:
                 print("  警告: timeline.json 不存在，跳过")
 
-        # kg_evaluation_queries.json — 仅替换顶层 user_id 和 query_id 前缀
+        # kg_evaluation_queries.json — 仅在 --kg-query-only 模式下上传
         kq_path = os.path.join(user_dir, "kg_evaluation_queries.json")
-        if os.path.exists(kq_path):
+        if kg_query_only and os.path.exists(kq_path):
             with open(kq_path) as f:
                 kq_data = json.load(f)
             if isinstance(kq_data, dict):

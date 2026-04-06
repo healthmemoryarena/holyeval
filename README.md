@@ -12,6 +12,7 @@
   <a href="https://github.com/healthmemoryarena/holyeval/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-3776AB.svg?logo=python&logoColor=white" alt="Python 3.11+"></a>
   <a href="https://docs.anthropic.com/en/docs/claude-code"><img src="https://img.shields.io/badge/Claude_Code-native-cc785c.svg?logo=anthropic&logoColor=white" alt="Claude Code Native"></a>
+  <a href="https://arxiv.org/abs/2604.02834"><img src="https://img.shields.io/badge/arXiv-2604.02834-b31b1b.svg" alt="arXiv Paper"></a>
   <a href="https://huggingface.co/datasets/healthmemoryarena/ESL-Bench"><img src="https://img.shields.io/badge/%F0%9F%A4%97_HuggingFace-ESL--Bench-FFD21E.svg" alt="HuggingFace Dataset"></a>
   <a href="http://healthmemoryarena.ai"><img src="https://img.shields.io/badge/%F0%9F%8C%90_Live-Health_Memory_Arena-black.svg" alt="Live Demo"></a>
   <a href="https://github.com/healthmemoryarena/holyeval/stargazers"><img src="https://img.shields.io/github/stars/healthmemoryarena/holyeval?style=social" alt="GitHub Stars"></a>
@@ -22,13 +23,22 @@
   <a href="#ai-native-development-with-claude-code">Claude Code</a> &middot;
   <a href="#web-ui">Web UI</a> &middot;
   <a href="http://healthmemoryarena.ai">Live Demo</a> &middot;
+  <a href="https://arxiv.org/abs/2604.02834">Paper</a> &middot;
   <a href="https://huggingface.co/datasets/healthmemoryarena/ESL-Bench">Dataset</a> &middot;
   <a href="#benchmarks">Benchmarks</a> &middot;
   <a href="#contributing">Contributing</a>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/holyeval_tasks.jpg" alt="HolyEval Web UI — Run Evaluations" width="80%">
+  <a href="https://arxiv.org/abs/2604.02834">
+    <img src="docs/screenshots/eslbench_overview.png" alt="ESL-Bench: Event-Driven Longitudinal Health Agent Benchmark" width="80%">
+  </a>
+</p>
+
+<p align="center">
+  <em>ESL-Bench — an event-driven synthetic longitudinal benchmark for health agents.
+  <br>100 synthetic users, 10,000 queries, 5 dimensions, programmatic ground truth.
+  <br>Read the paper: <a href="https://arxiv.org/abs/2604.02834">arXiv:2604.02834</a></em>
 </p>
 
 ---
@@ -58,7 +68,7 @@ uv run python -m benchmark.basic_runner medcalc sample --target-model gpt-5.4-mi
 uv run python -m benchmark.basic_runner memoryarena sample --target-model gemini-3-pro --limit 3
 
 # ESLBench requires data preparation first (see Quick Start below)
-uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-5.4-mini --limit 3
+uv run python -m benchmark.basic_runner eslbench sample50-20260331 --target-model gpt-5.4-mini --limit 3
 
 # Ready for a full run? Remove --limit to run the entire dataset
 ```
@@ -246,22 +256,40 @@ holyeval/
 |---|---|---|---|
 | **HealthBench** | [OpenAI HealthBench](https://arxiv.org/abs/2505.07469) | `sample` (100), `full`, `hard`, `consensus` | Medical AI quality |
 | **MedCalc-Bench** | [MedCalc-Bench](https://arxiv.org/abs/2406.12036) | `sample`, `full` | Medical calculations |
-| **ESLBench** | ThetaGen KG | `sample50-20260324` (50), `full-20260324` (1800) | Health knowledge graph Q&A |
+| **ESLBench** | [arXiv:2604.02834](https://arxiv.org/abs/2604.02834) | `sample50-20260331` (50), `sample500-20260331` (500), `full-20260331` (4500) | Longitudinal health reasoning |
 | **AgentClinic** | [AgentClinic](https://arxiv.org/abs/2405.07960) | `medqa` (107), `nejm` (15) | Clinical diagnosis |
 | **MedHall** | Custom | `theta` (30) | Hallucination detection |
 | **MemoryArena** | [MemoryArena](https://arxiv.org/abs/2501.13916) | `sample` (10), `full` (701) | Agent memory |
 
-### ESLBench — Health Knowledge Graph Q&A
+### ESLBench — Event-Driven Synthetic Longitudinal Benchmark
 
-ESLBench evaluates an LLM's ability to answer health questions using structured data retrieval tools (JSON lookup + DuckDB SQL queries). Built on synthetic health knowledge graphs with 20 virtual users, covering 5 difficulty levels:
+ESLBench ([arXiv:2604.02834](https://arxiv.org/abs/2604.02834)) evaluates longitudinal health reasoning — the ability to align, aggregate, and attribute across multi-source patient trajectories combining device streams, clinical exams, and life events. Built on an event-driven synthesis framework where each user trajectory is modeled as a baseline health state plus discrete events with explicit temporal kernels (sigmoid onset, exponential decay), making ground truth programmatically computable.
 
-| Difficulty | Description | Example |
+<p align="center">
+  <img src="docs/screenshots/eslbench_trajectory.png" alt="ESL-Bench Trajectory Visualization" width="70%">
+</p>
+
+<p align="center"><em>Four-month trajectory excerpt — event-driven indicator dynamics with sigmoid onset and exponential decay.</em></p>
+
+**100 synthetic users** with 1–5 year trajectories, **10,000 evaluation queries** across five dimensions and three difficulty tiers:
+
+| Dimension | What it tests | Example |
 |---|---|---|
-| **direct** | Direct data retrieval | "What is the patient's blood type?" |
-| **single_hop** | Single-hop reasoning | "What was the latest blood pressure reading?" |
-| **multi_hop** | Multi-hop reasoning | "Which indicators improved after starting medication X?" |
-| **multi_hop_temporal** | Multi-hop + time window | "Average heart rate over the past 30 days?" |
-| **attribution** | Event attribution analysis | "Which event most likely caused the spike in stress levels?" |
+| **Lookup** | Direct data retrieval | "What was resting heart rate on 2024-03-15?" |
+| **Trend** | Temporal pattern analysis | "In which month was step count highest?" |
+| **Comparison** | Cross-event/source comparisons | "How did mean steps change after jogging started?" |
+| **Anomaly** | Abnormality detection | "Has glucose ever been abnormal?" |
+| **Explanation** | Causal attribution | "Rank events by impact on glucose drop" |
+
+<details>
+<summary><strong>Benchmark results — 13 methods across 3 paradigms</strong></summary>
+<br>
+<p align="center">
+  <img src="docs/screenshots/eslbench_results.png" alt="ESL-Bench Main Results" width="80%">
+</p>
+
+Key findings: DB agents (48–58%) substantially outperform memory RAG (30–38%), with the gap concentrated on Comparison and Explanation queries where multi-hop reasoning and evidence attribution are required.
+</details>
 
 **Data preparation required** — ESLBench downloads user data from HuggingFace and builds per-user DuckDB indexes:
 
@@ -270,13 +298,14 @@ ESLBench evaluates an LLM's ability to answer health questions using structured 
 uv run python -m generator.eslbench.prepare_data
 
 # Quick test: 3 cases to verify setup (< $0.05)
-uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-5.4-mini --limit 3
+uv run python -m benchmark.basic_runner eslbench sample50-20260331 --target-model gpt-5.4-mini --limit 3
 
-# Sample dataset (50 cases)
-uv run python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-5.4-mini
+# Sample datasets
+uv run python -m benchmark.basic_runner eslbench sample50-20260331 --target-model gpt-5.4-mini      # 50 cases
+uv run python -m benchmark.basic_runner eslbench sample500-20260331 --target-model gpt-5.4-mini -p 5 # 500 cases
 
-# Full benchmark (1800 cases — significant API cost, review before running)
-uv run python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-5.4-mini -p 5
+# Full benchmark (4500 cases — significant API cost, review before running)
+uv run python -m benchmark.basic_runner eslbench full-20260331 --target-model gpt-5.4-mini -p 5
 ```
 
 The LLM target is equipped with a tool group (`eslbench/retrieve`) that provides JSON file reading, DuckDB queries, and indicator lookup — the LLM must use these tools to find answers in the user's health data.
@@ -398,6 +427,19 @@ Contributions are welcome! The easiest way to contribute is through Claude Code 
 | **Improve existing benchmarks** | Add more test cases, edge cases, or better prompts | Easy |
 
 Please open an issue first to discuss significant changes.
+
+## Citation
+
+If you use ESL-Bench or HolyEval in your research, please cite:
+
+```bibtex
+@article{li2026eslbench,
+  title={ESL-Bench: An Event-Driven Synthetic Longitudinal Benchmark for Health Agents},
+  author={Li, Chao and Liu, Cailiang and Gao, Ang and Deng, Kexin and Zhang, Shu and Xu, Langping and Shi, Xiaotong and Ding, Xionghao and Pei, Jian and Jiang, Xun},
+  journal={arXiv preprint arXiv:2604.02834},
+  year={2026}
+}
+```
 
 ## License
 
