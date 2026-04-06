@@ -136,7 +136,7 @@
                                                 <span x-text="tc.name"></span>
                                                 <span class="text-amber-500/60 dark:text-amber-500/40 font-normal" x-text="Object.keys(tc.args || {}).length ? '(' + JSON.stringify(tc.args) + ')' : '()'"></span>
                                             </div>
-                                            <div x-show="tc.result" class="mt-1 text-muted-foreground whitespace-pre-wrap break-all max-h-32 overflow-y-auto" x-text="tc.result?.substring(0, 2000) + (tc.result?.length > 2000 ? '...' : '')"></div>
+                                            <div x-show="tc.result" class="mt-1 text-muted-foreground whitespace-pre-wrap break-all max-h-96 overflow-y-auto" x-text="tc.result"></div>
                                         </div>
                                     </template>
                                 </div>
