@@ -31,7 +31,8 @@ logger = logging.getLogger(__name__)
 
 _DOT_DATA = Path(__file__).resolve().parents[1] / ".data"
 _ALLOWED_EXTENSIONS = {".json"}
-_BLOCKED_FILES = {"events.json", "kg_evaluation_queries.json"}
+_BLOCKED_FILES = {"events.json"}
+_BLOCKED_PREFIXES = ("kg_evaluation_queries",)
 _FORBIDDEN_SQL = {"INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE"}
 _BLOCKED_TABLES = {"evaluation_queries"}
 
@@ -131,7 +132,7 @@ def _resolve_json_file(ctx: ToolContext, filename: str) -> tuple[Path | None, st
     """校验并解析文件路径。"""
     if ".." in filename or "/" in filename or "\\" in filename:
         return None, "错误: 文件名不能包含路径分隔符"
-    if filename in _BLOCKED_FILES:
+    if filename in _BLOCKED_FILES or filename.startswith(_BLOCKED_PREFIXES):
         return None, f"错误: 文件 {filename} 不可访问"
     fp = ctx.data_dir / filename
     if fp.suffix not in _ALLOWED_EXTENSIONS:
@@ -531,7 +532,7 @@ def list_files(runtime: ToolRuntime[ToolContext]) -> str:
         return f"错误: 用户数据目录不存在 ({ctx.user_dir_name})"
     files = []
     for f in sorted(ctx.data_dir.iterdir()):
-        if f.is_file() and f.suffix in _ALLOWED_EXTENSIONS and f.name not in _BLOCKED_FILES:
+        if f.is_file() and f.suffix in _ALLOWED_EXTENSIONS and f.name not in _BLOCKED_FILES and not f.name.startswith(_BLOCKED_PREFIXES):
             size_kb = f.stat().st_size / 1024
             tag = " [推荐 lookup_* 或 query_json/search_file]" if size_kb > 100 else ""
             files.append(f"{f.name} ({size_kb:.1f} KB){tag}")

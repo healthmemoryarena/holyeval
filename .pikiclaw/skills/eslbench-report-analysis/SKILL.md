@@ -7,14 +7,16 @@ description: Use when analyzing ESL-Bench evaluation reports - extracting scores
 
 Extract and compare evaluation results from HolyEval benchmark report JSON files.
 
-## Report Location
+## Report Locations
 
 ```
 ~/xiaotong/holyeval/benchmark/report/eslbench/
   {dataset}_{target_type}_{model}_{date}_{time}.json
+~/*/holyeval/benchmark/report/eslbench/
+  {dataset}_{target_type}_{model}_{date}_{time}.json
 ```
 
-Example: `sample50-20260331_llm_api_gpt-5.4_20260331_223735.json`
+Example report paths for recent 3 days: YYYYMMDD-3 to YYYYMMDD: `~/xiaotong/holyeval/benchmark/report/eslbench/sample50-20260331_*_{YYYYMMDD-2,YYYYMMDD-1,YYYYMMDD}*.json`
 
 ## Report JSON Structure
 
@@ -80,6 +82,12 @@ Input can be any of:
 - **Zip file path**: extract, scan `*.json` inside
 
 The analysis output MUST show the **full resolved file path** for each report processed.
+
+**CRITICAL: Script stdout may be truncated when output is large (>2KB).** To ensure file paths are always visible to the user:
+1. Write the resolved file path list into the **markdown report file** (under a `## Processed Report Files` section)
+2. Also print a **brief summary** (file count + sources) directly to the user in your text response, e.g. "31 files analyzed: 21 LOCAL + 10 ZIP"
+
+Do NOT rely on script stdout alone for showing file paths — it will be truncated for large analyses.
 
 Default report location (if no input specified): `~/xiaotong/holyeval/benchmark/report/eslbench/`
 
@@ -222,6 +230,14 @@ def analyze_fails(report):
 | Orchestrator model error | Target model API returned error (rate limit, bad response) | Check API key/quota, retry |
 | Async task error | General asyncio failure | Check logs for root cause |
 
+### When to Run Fail Reason Analysis
+
+**For every report with fail_count > 0**, run `analyze_fails()` and include the breakdown in:
+1. The **markdown report** — add a `## Fail Reason Breakdown` section listing each report's fail sub-categories (Timeout vs Orchestrator vs Async vs other)
+2. The **per-dimension error analysis** — when showing `FAIL_execution_error:N`, also note the sub-category if available (e.g. `FAIL_execution_error:3 (2 Timeout, 1 Orchestrator)`)
+
+Do NOT just report the total `FAIL_execution_error` count without sub-classifying.
+
 ## Per-Agent Per-Dimension Error Analysis
 
 Classify WHY each agent scores low on each dimension. Combines fail cases and low-score cases into one view.
@@ -331,22 +347,136 @@ def print_full_analysis(inputs=None, show_cases=3):
                     print(f"    {reason}: {', '.join(ids)}{suffix}")
 ```
 
-### Cross-Agent Dimension Patterns (Observed)
+### Cross-Agent Dimension Patterns
 
-| Dimension | LLM+retrieval | RAG (k=10/50) | Structured API |
+When multiple agent types are present (LLM-direct, RAG, Structured API / theta), **always generate a cross-agent comparison table** in the markdown report under `## Cross-Agent Error Patterns`. Group agents into categories and show the top 2 error types per dimension per category.
+
+Template (populate from actual data, not hardcoded):
+
+| Dimension | LLM-direct (top errors) | RAG (top errors) | Structured API (top errors) |
 |---|---|---|---|
-| **Lookup** | `no_data_found`, `partial_list_match` | `rubric_low_score`, `no_data_found` | `numeric_mismatch` |
-| **Trend** | `no_data_found`, `rubric_low_score` | `numeric_mismatch`, `rubric_low_score` | `numeric_mismatch` |
-| **Comparison** | `partial_list_match` (dominant), `rubric_low_score` | `partial_list_match`, `rubric_low_score` | `rubric_low_score`, `partial_list_match` |
-| **Anomaly** | Generally high; `partial_list_match` rare | `numeric_mismatch`, `partial_list_match` | `numeric_mismatch` |
-| **Explanation** | `no_data_found`, `rubric_low_score` (hardest) | `numeric_mismatch`, `rubric_low_score` | `numeric_mismatch`, `rubric_low_score` |
+| **Lookup** | ... | ... | ... |
+| **Trend** | ... | ... | ... |
+| **Comparison** | ... | ... | ... |
+| **Anomaly** | ... | ... | ... |
+| **Explanation** | ... | ... | ... |
 
-Key insights:
-- **LLM+retrieval** fails on Comparison (can't enumerate cross-event overlaps) and Explanation (missing causal chains)
+Agent category mapping:
+- **LLM-direct**: `llm_api` target type (gpt-5.4, gemini-flash, claude-sonnet, minimax, glm, etc.)
+- **RAG**: `*_rag_api` target types (hippo_rag, dyg_rag, mem0_rag, evermem)
+- **Structured API**: `theta_api`, `theta_smart_api`
+
+After the table, add a **Key insights** paragraph noting which categories dominate which dimensions and why.
+
+Reference patterns (from prior analyses — verify against current data):
+- **LLM-direct** tends to fail on Comparison (`partial_list_match`) and Explanation (`numeric_mismatch`)
 - **RAG methods** suffer `numeric_mismatch` across all dimensions — retrieval noise degrades computation
-- **Structured API at 0%** is connectivity issue, not capability — all errors are format/match failures on empty responses
-- **Comparison** is universally the weakest dimension across all agent types
-- **Anomaly** discriminates most: LLM+retrieval scores 80%+ while RAG drops to 1-25%
+- **Structured API at 0%** may be connectivity issue — check if all scores are exactly 0.0
+- **Comparison** is typically the weakest dimension across all agent types
+- **Anomaly** discriminates most: LLM-direct scores 72-98% while RAG drops to 1-48%
+
+## Error Sample Cases Export
+
+When running analysis, **always export error/low-score cases to a JSON file** alongside the markdown report. This enables case-level debugging without re-parsing report files.
+
+### Export Script
+
+```python
+def export_error_cases(inputs=None, threshold=0.8, output_path=None):
+    """Export all low-score and failed cases to a JSON file for debugging.
+    
+    Args:
+        inputs: same as analyze_reports()
+        threshold: score below this is considered error (default 0.8)
+        output_path: output JSON path. Default: docs/eslbench_error_cases-YYYYMMDD.json
+    
+    Returns: output file path
+    """
+    import datetime
+    if inputs is None:
+        inputs = [os.path.expanduser("~/xiaotong/holyeval/benchmark/report/eslbench")]
+    if output_path is None:
+        today = datetime.date.today().strftime("%Y%m%d")
+        output_path = f"docs/eslbench_error_cases-{today}.json"
+
+    files = resolve_report_files(inputs)
+    error_cases = []
+
+    for fpath in files:
+        fname = os.path.basename(fpath)
+        with open(fpath) as f:
+            report = json.load(f)
+        for c in report.get("cases", []):
+            ev = c.get("eval", {})
+            score = ev.get("score")
+            result = ev.get("result", "")
+            is_fail = result in ("fail", "error")
+            is_low = score is not None and score < threshold
+
+            if not is_fail and not is_low:
+                continue
+
+            diff = next((t.split(":",1)[1] for t in c.get("tags",[])
+                         if t.startswith("difficulty:")), None)
+            atype = next((t.split(":",1)[1] for t in c.get("tags",[])
+                          if t.startswith("answer_type:")), None)
+            category = "FAIL_execution_error" if is_fail else classify_feedback(ev.get("feedback", ""))
+
+            error_cases.append({
+                "report_file": fname,
+                "case_id": c.get("id", "?"),
+                "difficulty": diff,
+                "answer_type": atype,
+                "score": score,
+                "eval_result": result,
+                "error_category": category,
+                "feedback": ev.get("feedback", ""),
+                "title": c.get("title", ""),
+                "description": c.get("description", ""),
+            })
+
+    # Sort by report_file, then difficulty, then score
+    diff_order = {d: i for i, d in enumerate(DIMS)}
+    error_cases.sort(key=lambda x: (
+        x["report_file"],
+        diff_order.get(x["difficulty"], 99),
+        x["score"] if x["score"] is not None else -1,
+    ))
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(error_cases, f, indent=2, ensure_ascii=False)
+
+    # Print summary
+    from collections import Counter
+    by_cat = Counter(c["error_category"] for c in error_cases)
+    by_diff = Counter(c["difficulty"] for c in error_cases)
+    print(f"\nExported {len(error_cases)} error cases to: {output_path}")
+    print(f"  By category: {dict(by_cat.most_common())}")
+    print(f"  By difficulty: {dict(by_diff.most_common())}")
+    return output_path
+```
+
+### Output Format
+
+Each exported case contains:
+
+| Field | Description |
+|---|---|
+| `report_file` | Source report filename |
+| `case_id` | e.g. `user5022_AT_demo_Q001` |
+| `difficulty` | Lookup/Trend/Comparison/Anomaly/Explanation |
+| `answer_type` | text/numeric_value/list/boolean |
+| `score` | 0.0-1.0, null for execution errors |
+| `eval_result` | "scored", "fail", "error" |
+| `error_category` | Classified: numeric_mismatch, partial_list_match, etc. |
+| `feedback` | Full eval feedback string |
+| `title` | Question title |
+| `description` | Full question description |
+
+### When to Export
+
+**Always call `export_error_cases()` after `print_table()` and `print_full_analysis()`.** The exported file is the entry point for case-level debugging — use it to trace specific failures back to dataset issues or model weaknesses.
 
 ## Interpretation Notes
 
@@ -359,7 +489,18 @@ Key insights:
 
 ## Output to File
 
-When saving analysis to a markdown file, output to `docs/eslbench_report_analysis-YYYYMMDD.md` and **always** print the mdpreview link:
+When saving analysis, produce **two files**:
+
+1. **Markdown report**: `docs/eslbench_report_analysis-YYYYMMDD.md` — must contain ALL of:
+   - `## Processed Report Files` — numbered list of full resolved file paths (with source tag if mixed)
+   - `## Score Overview` — the score table
+   - `## Summary` — the 6-point free-form analysis
+   - `## Fail Reason Breakdown` — per-report sub-classification of fails (Timeout/Orchestrator/Async/other), only for reports with fail_count > 0
+   - `## Cross-Agent Error Patterns` — the cross-agent dimension comparison table (if multiple agent types present)
+   - `## Error Distribution` — aggregate error category and difficulty counts
+2. **Error cases JSON**: `docs/eslbench_error_cases-YYYYMMDD.json` — all low-score/failed cases for debugging
+
+**Always** print the mdpreview link for the markdown report:
 
 ```
 http://10.241.13.122:22086/preview.html?path={path-relative-to-/home/fat/}
@@ -369,4 +510,27 @@ Example: if saved to `/home/fat/caill/thetagendata/docs/eslbench_report_analysis
 
 ```
 http://10.241.13.122:22086/preview.html?path=caill/thetagendata/docs/eslbench_report_analysis-20260401.md
+Error cases: docs/eslbench_error_cases-20260401.json (N cases)
 ```
+
+## Final: Verify Output Sections
+
+**After writing the markdown report, MUST run this verification before completing:**
+
+```bash
+REQUIRED_SECTIONS=("## Processed Report Files" "## Score Overview" "## Summary" "## Fail Reason Breakdown" "## Cross-Agent Error Patterns" "## Error Distribution")
+MISSING=()
+for section in "${REQUIRED_SECTIONS[@]}"; do
+  grep -qF "$section" "$OUTPUT_FILE" || MISSING+=("$section")
+done
+if [ ${#MISSING[@]} -eq 0 ]; then
+  echo "OK: All 6 required sections present"
+else
+  echo "MISSING sections:"
+  printf "  - %s\n" "${MISSING[@]}"
+fi
+```
+
+If any section is MISSING, add it to the report file before completing. Exceptions:
+- `## Fail Reason Breakdown` may be omitted ONLY if ALL reports have `fail_count == 0`
+- `## Cross-Agent Error Patterns` may be omitted ONLY if all reports are from the same agent type

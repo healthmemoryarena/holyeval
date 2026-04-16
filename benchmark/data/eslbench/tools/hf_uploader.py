@@ -68,7 +68,8 @@ def _write_and_upload(api, obj, filename, tmpdir, repo_id, path_in_repo):
                     repo_id=repo_id, repo_type="dataset")
 
 
-def upload_user(repo_id: str, batch: str, user_dir: str, dir_name: str, kg_query_only: bool = False) -> None:
+def upload_user(repo_id: str, batch: str, user_dir: str, dir_name: str,
+                kg_query_only: bool = False, query_date: str = "") -> None:
     token = os.environ.get("HF_TOKEN")
     api = HfApi(token=token)
     user_dir = os.path.realpath(user_dir)
@@ -113,15 +114,25 @@ def upload_user(repo_id: str, batch: str, user_dir: str, dir_name: str, kg_query
             else:
                 print("  警告: timeline.json 不存在，跳过")
 
-        # kg_evaluation_queries.json — 仅在 --kg-query-only 模式下上传
-        kq_path = os.path.join(user_dir, "kg_evaluation_queries.json")
+        # kg_evaluation_queries — 仅在 --kg-query-only 模式下上传
+        # 优先查找 dated 文件，回退到旧文件名
+        if query_date:
+            kq_filename = f"kg_evaluation_queries_{query_date}.json"
+        else:
+            kq_filename = "kg_evaluation_queries.json"
+        kq_path = os.path.join(user_dir, kq_filename)
+        if not os.path.exists(kq_path):
+            # 回退: 尝试旧文件名
+            kq_path = os.path.join(user_dir, "kg_evaluation_queries.json")
+            if query_date:
+                kq_filename = f"kg_evaluation_queries_{query_date}.json"  # 上传仍用 dated 名
         if kg_query_only and os.path.exists(kq_path):
             with open(kq_path) as f:
                 kq_data = json.load(f)
             if isinstance(kq_data, dict):
                 kq_data = _sanitize_kg_queries(kq_data, raw_id, dir_name)
-            _write_and_upload(api, kq_data, "kg_evaluation_queries.json", tmpdir, repo_id,
-                              f"data/{batch}/{dir_name}/kg_evaluation_queries.json")
+            _write_and_upload(api, kq_data, kq_filename, tmpdir, repo_id,
+                              f"data/{batch}/{dir_name}/{kq_filename}")
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -135,6 +146,8 @@ if __name__ == "__main__":
     parser.add_argument("--user-dir", required=True, help="用户数据目录")
     parser.add_argument("--dir-name", required=True, help="目标目录名 (如 user5022_AT_demo)")
     parser.add_argument("--kg-query-only", action="store_true", help="仅上传 kg_evaluation_queries.json")
+    parser.add_argument("--query-date", default="", help="查询日期后缀 (如 20260407)")
     args = parser.parse_args()
 
-    upload_user(args.repo, args.batch, args.user_dir, args.dir_name, kg_query_only=args.kg_query_only)
+    upload_user(args.repo, args.batch, args.user_dir, args.dir_name,
+                kg_query_only=args.kg_query_only, query_date=args.query_date)

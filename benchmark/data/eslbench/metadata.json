@@ -1,5 +1,5 @@
 {
-  "description": "# ESL-Bench 纵向健康推理评测\n\n事件驱动合成纵向评测基准（[arXiv:2604.02834](https://arxiv.org/abs/2604.02834)），评估跨多源患者轨迹的时间推理能力。100 个合成用户 × 100 题 = 10,000 条评测，覆盖 5 个评测维度:\n- **Lookup**: 直接数据检索（指标值/日期/属性查询）\n- **Trend**: 时序趋势分析（聚合/排序/模式识别）\n- **Comparison**: 跨事件/跨源对比（事件前后变化/多指标对比）\n- **Anomaly**: 异常检测（阈值判断/异常区间识别）\n- **Explanation**: 因果归因（事件影响排序/机制解释）\n\n| 数据集 | 说明 | 条数 |\n|--------|------|------|\n| `full-20260331` | 全量（45 用户） | 4,500 |\n| `sample500-20260331` | 抽样 500 | 500 |\n| `sample50-20260331` | 快速验证 | 50 |\n\n### Target 类型\n- **theta_api / theta_smart_api**: Theta Health API（默认 expert agent）\n- **llm_api**: 基模 + retrieve 工具组（文件检索 + DuckDB 查询）\n- **hippo_rag_api / dyg_rag_api / naive_rag_api**: RAG 系统评测\n\n评估器: `kg_qa`（混合规则/LLM，按 answer_type 路由）",
+  "description": "# ESL-Bench 纵向健康推理评测\n\n事件驱动合成纵向评测基准（[arXiv:2604.02834](https://arxiv.org/abs/2604.02834)），评估跨多源患者轨迹的时间推理能力。100 个合成用户 × 100 题 = 10,000 条评测，覆盖 5 个评测维度:\n- **Lookup**: 直接数据检索（指标值/日期/属性查询）\n- **Trend**: 时序趋势分析（聚合/排序/模式识别）\n- **Comparison**: 跨事件/跨源对比（事件前后变化/多指标对比）\n- **Anomaly**: 异常检测（阈值判断/异常区间识别）\n- **Explanation**: 因果归因（事件影响排序/机制解释）\n\n| 数据集 | 说明 | 条数 |\n|--------|------|------|\n| `full-20260331` | 全量（45 用户） | 4,500 |\n| `sample500-20260331` | 抽样 500 | 500 |\n| `sample50-20260331` | 快速验证 | 50 |\n\n### Target 类型\n- **theta_api / theta_smart_api**: Theta Health API（默认 expert agent）\n- **llm_api**: 基模 + retrieve 工具组（文件检索 + DuckDB 查询）\n- **hippo_rag_api / dyg_rag_api / naive_rag_api**: RAG 系统评测\n- **hermes**: Hermes Agent（terminal/file 工具自主检索）\n\n评估器: `kg_qa`（混合规则/LLM，按 answer_type 路由）",
   "prepare": "generator.eslbench.prepare_data",
   "target": [
     {
@@ -163,6 +163,24 @@
           "default": 10,
           "editable": true,
           "required": false
+        }
+      }
+    },
+    {
+      "type": "hermes",
+      "fields": {
+        "model": {
+          "default": null,
+          "editable": false
+        },
+        "system_prompt": {
+          "default": null,
+          "editable": true,
+          "required": false
+        },
+        "user_email": {
+          "default": null,
+          "editable": false
         }
       }
     }

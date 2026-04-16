@@ -104,6 +104,7 @@ class LlmApiTargetInfo(BaseModel):
     type: Literal["llm_api"] = Field(description="Target type")
     model: Literal[
         "gpt-5.4",
+        "gpt-5.4-mini",
         "gpt-5.2",
         "gpt-4.1",
         "gemini-3.1-pro-preview",

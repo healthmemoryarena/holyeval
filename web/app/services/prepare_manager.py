@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -75,6 +76,7 @@ class PrepareManager:
     async def _run_script(self, entry: PrepareEntry) -> None:
         """Execute prepare script as a subprocess"""
         try:
+            env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
@@ -82,6 +84,7 @@ class PrepareManager:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(Path(__file__).resolve().parents[3]),  # project root
+                env=env,
             )
             stdout, stderr = await proc.communicate()
 
@@ -92,11 +95,11 @@ class PrepareManager:
                 entry.status = "completed"
                 logger.info("Prepare script done: %s (%.1fs)", entry.benchmark, elapsed)
                 if stdout:
-                    for line in stdout.decode().strip().splitlines()[-5:]:
+                    for line in stdout.decode("utf-8", errors="replace").strip().splitlines()[-5:]:
                         logger.debug("[%s stdout] %s", entry.benchmark, line)
             else:
                 entry.status = "error"
-                err_msg = stderr.decode()[-1000:] if stderr else f"exit code {proc.returncode}"
+                err_msg = stderr.decode(errors="replace")[-1000:] if stderr else f"exit code {proc.returncode}"
                 entry.error = err_msg
                 logger.error("Prepare script failed: %s (exit=%d) - %s", entry.benchmark, proc.returncode, err_msg)
 

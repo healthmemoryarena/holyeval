@@ -103,6 +103,27 @@ ChatMessage = Annotated[BaseMessage, BeforeValidator(_to_base_message)]
 # ============================================================
 
 
+class PersonaConfig(BaseModel):
+    """虚拟用户行为特征配置 — 五维三档对抗画像
+
+    | 维度        | 档1 (baseline)          | 档2 (中间)                  | 档3 (极端)        |
+    |-------------|------------------------|----------------------------|--------------------|
+    | disclosure  | responsive             | reluctant                  | withholding        |
+    | attitude    | compliant              | impatient                  | dominant           |
+    | cognition   | accurate               | partial_understanding      | complete_denial    |
+    | logic       | consistent             | occasional_contradiction   | fabricating        |
+    | expression  | normal                 | vague                      | incoherent         |
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    disclosure: Literal["responsive", "reluctant", "withholding"] = "responsive"
+    attitude: Literal["compliant", "impatient", "dominant"] = "compliant"
+    cognition: Literal["accurate", "partial_understanding", "complete_denial"] = "accurate"
+    logic: Literal["consistent", "occasional_contradiction", "fabricating"] = "consistent"
+    expression: Literal["normal", "vague", "incoherent"] = "normal"
+
+
 class AutoUserInfo(BaseModel):
     """自动模式虚拟用户配置（LLM 驱动）
 
@@ -166,6 +187,15 @@ class AutoUserInfo(BaseModel):
     finish_condition: Optional[str] = Field(
         None,
         description=("终止条件 — 对话终止条件的语义化描述，LLM 据此判断何时结束。\n不填时默认为「goal 已达成」。"),
+    )
+    persona: Optional[PersonaConfig] = Field(
+        None,
+        description=(
+            "虚拟用户行为特征 — 五维三档对抗画像配置。\n"
+            "维度: disclosure (信息披露), attitude (态度), cognition (认知), logic (逻辑), expression (表达)。\n"
+            "每个维度三档: 档1(baseline) → 档2(中间) → 档3(极端)。\n"
+            "auto TestAgent 会据此在 system prompt 中注入对应的行为描述。"
+        ),
     )
 
 
@@ -463,7 +493,9 @@ class TestCost(BaseModel):
     test: Dict[str, UsageMetadata] = Field(default_factory=dict, description="测试代理成本")
     eval: Dict[str, UsageMetadata] = Field(default_factory=dict, description="评测器成本")
     target: Optional[Dict[str, UsageMetadata]] = Field(default=None, description="被测目标成本（可选）")
-    target_detail: Optional[Dict[str, Any]] = Field(default=None, description="被测目标成本明细（含 breakdown、cache、cost 等原始数据）")
+    target_detail: Optional[Dict[str, Any]] = Field(
+        default=None, description="被测目标成本明细（含 breakdown、cache、cost 等原始数据）"
+    )
 
 
 class EvalResult(BaseModel):
@@ -604,12 +636,18 @@ class TargetAgentReaction(BaseModel):
         return self
 
     def extract_text(self) -> str:
-        """从 TargetAgentReaction 中提取可读文本"""
+        """从 TargetAgentReaction 中提取可读文本（仅 reply 类型）"""
         if self.type == "message" and self.message_list:
             parts: list[str] = []
             for msg in self.message_list:
-                if isinstance(msg, dict) and msg.get("content"):
-                    parts.append(str(msg["content"]))
+                if not isinstance(msg, dict):
+                    continue
+                # 有 type 字段时只取 reply；无 type（旧格式）视为 reply
+                if msg.get("type", "reply") != "reply":
+                    continue
+                content = msg.get("content")
+                if isinstance(content, str) and content:
+                    parts.append(content)
             return "\n".join(parts)
 
         if self.type == "gui" and self.gui_snapshots:
@@ -753,6 +791,7 @@ class AgentInfo(BaseModel):
     features: List[str]
     icon: str
     color: str
+    icon_url: str = ""  # 产品 logo 图片路径（优先于 SVG icon 展示）
     config_schema: Dict[str, Any]
     config_examples: List[Dict[str, Any]]
     cost_meta: Dict[str, Any] = {}  # 费用预估元数据（由 plugin 声明 _cost_meta）

@@ -1,0 +1,17 @@
+{
+  "description": "# Dialogue Quality Evaluation\n\nMulti-turn dialogue quality evaluation for Theta Health AI.\n\n## Layer 1 (RECORD + RETRIEVAL)\nTests RECORD acknowledgment quality and RETRIEVAL data accuracy.\n**Evaluator**: `record_retrieval` (zero LLM, per-turn checkpoints)\n\n| Dataset | Cases | Purpose |\n|---------|-------|---------|\n| smoke | 5 | CI gate — fast smoke test |\n| core | 15+ | Full evaluation — all record types |\n\n## Layer 2 (Dialogue Quality)\nLLM-as-judge multi-dimension quality scoring for complex health management scenarios.\n**Evaluator**: `dialogue_quality` (6 dimensions, LLM judge)\n\n| Dataset | Cases | Purpose |\n|---------|-------|---------|\n| l2_core | 12 | Health interpret + plan + Q&A, with persona combos |\n| l2_hard | 9 | Adversarial: contradiction + danger + memory pressure |\n\n**Target**: `theta_api` (Theta Health API)",
+  "target": [
+    {
+      "type": "theta_api",
+      "fields": {
+        "agent": {"default": "expert", "editable": true}
+      }
+    },
+    {
+      "type": "theta_smart_api",
+      "fields": {
+        "agent": {"default": "expert", "editable": true}
+      }
+    }
+  ]
+}

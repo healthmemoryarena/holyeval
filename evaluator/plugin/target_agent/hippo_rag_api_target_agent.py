@@ -953,6 +953,7 @@ class HippoRagApiTargetAgent(AbstractTargetAgent, name="hippo_rag_api", params_m
         ),
         "color": "#8b5cf6",
         "features": ["RAG", "Vector Search", "HippoRAG"],
+        "icon_url": "/static/images/agents/hipporag.png",
     }
     _cost_meta = {
         "est_input_tokens": 8000,

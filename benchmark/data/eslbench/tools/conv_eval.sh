@@ -83,6 +83,7 @@ PARALLELISM=1
 KG_QUERY_ONLY=false
 KG_QUERY_ONLY_FILE=""
 SAMPLE_N_PER_DIM=10
+QUERY_DATE="$(date +%Y%m%d)"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -100,6 +101,7 @@ while [[ $# -gt 0 ]]; do
         --eslbench-repo) ESLBENCH_REPO="$2"; shift 2 ;;
         --eslbench-batch) ESLBENCH_BATCH="$2"; shift 2 ;;
         --queries-per-user) QUERIES_PER_USER="$2"; shift 2 ;;
+        --query-date) QUERY_DATE="$2"; shift 2 ;;
         --kg-query-only)
             KG_QUERY_ONLY=true
             if [[ $# -gt 1 && ! "$2" =~ ^- ]]; then
@@ -295,14 +297,15 @@ for CURRENT_EMAIL in "${EMAIL_LIST[@]}"; do
     if [[ "$KG_QUERY_ONLY" == true ]]; then
     echo "  KG Only:     true${KG_QUERY_ONLY_FILE:+ ($KG_QUERY_ONLY_FILE)}"
     fi
+    echo "  Query Date:  $QUERY_DATE"
     echo "  Sample/dim:  $SAMPLE_N_PER_DIM"
     echo "============================================================"
 
 # ============================================================
-# Step 1: 生成评测题目 (kg_evaluation_queries.json)
+# Step 1: 生成评测题目 (kg_evaluation_queries_YYYYMMDD.json)
 # ============================================================
 
-QUERIES_FILE="$CURRENT_USER_DIR/kg_evaluation_queries.json"
+QUERIES_FILE="$CURRENT_USER_DIR/kg_evaluation_queries_${QUERY_DATE}.json"
 
 if [[ "$KG_QUERY_ONLY" == true ]]; then
     echo ""
@@ -317,16 +320,29 @@ if [[ "$KG_QUERY_ONLY" == true ]]; then
     else
         echo "[Step 1] 使用已有的 kg_evaluation_queries 文件 (--kg-query-only)"
         if [[ ! -f "$QUERIES_FILE" ]]; then
-            echo "错误: $QUERIES_FILE 不存在，请通过 --kg-query-only <file> 指定" >&2
-            exit 1
+            # 回退: 尝试旧文件名 kg_evaluation_queries.json
+            LEGACY_FILE="$CURRENT_USER_DIR/kg_evaluation_queries.json"
+            if [[ -f "$LEGACY_FILE" ]]; then
+                echo "  → dated 文件不存在，使用旧文件: $LEGACY_FILE"
+                cp "$LEGACY_FILE" "$QUERIES_FILE"
+            else
+                echo "错误: $QUERIES_FILE 不存在，请通过 --kg-query-only <file> 指定" >&2
+                exit 1
+            fi
         fi
     fi
 elif [[ "$SKIP_QUERY_GEN" == true ]]; then
     echo ""
     echo "[Step 1] 跳过题目生成 (--skip-query-gen)"
     if [[ ! -f "$QUERIES_FILE" ]]; then
-        echo "错误: $QUERIES_FILE 不存在" >&2
-        exit 1
+        LEGACY_FILE="$CURRENT_USER_DIR/kg_evaluation_queries.json"
+        if [[ -f "$LEGACY_FILE" ]]; then
+            echo "  → dated 文件不存在，使用旧文件: $LEGACY_FILE"
+            cp "$LEGACY_FILE" "$QUERIES_FILE"
+        else
+            echo "错误: $QUERIES_FILE 不存在" >&2
+            exit 1
+        fi
     fi
 else
     echo ""
@@ -400,10 +416,17 @@ mkdir -p "$TARGET_DATA_DIR"
 
 if [[ "$KG_QUERY_ONLY" == true ]]; then
     echo ""
-    echo "[Step 4] 仅软链接 kg_evaluation_queries.json (--kg-query-only)..."
+    echo "[Step 4] 链接 kg_evaluation_queries (--kg-query-only)..."
     if [[ -f "$QUERIES_FILE" ]]; then
-        ln -sf "$QUERIES_FILE" "$TARGET_DATA_DIR/kg_evaluation_queries.json"
-        echo "  → $TARGET_DATA_DIR/kg_evaluation_queries.json"
+        DATED_TARGET="$TARGET_DATA_DIR/kg_evaluation_queries_${QUERY_DATE}.json"
+        LATEST_TARGET="$TARGET_DATA_DIR/kg_evaluation_queries.json"
+        # 仅在源文件与目标不同时创建链接
+        if [[ "$(realpath "$QUERIES_FILE")" != "$(realpath "$DATED_TARGET" 2>/dev/null)" ]]; then
+            ln -sf "$QUERIES_FILE" "$DATED_TARGET"
+        fi
+        ln -sf "kg_evaluation_queries_${QUERY_DATE}.json" "$LATEST_TARGET"
+        echo "  → $DATED_TARGET"
+        echo "  → $LATEST_TARGET -> kg_evaluation_queries_${QUERY_DATE}.json (latest)"
     else
         echo "  警告: $QUERIES_FILE 不存在" >&2
     fi
@@ -435,9 +458,14 @@ else
         echo "  警告: 未找到 *_timeline.json" >&2
     fi
 
-    # 软链接 queries
+    # 链接 queries（dated + latest）
     if [[ -f "$QUERIES_FILE" ]]; then
-        ln -sf "$QUERIES_FILE" "$TARGET_DATA_DIR/kg_evaluation_queries.json"
+        DATED_TARGET="$TARGET_DATA_DIR/kg_evaluation_queries_${QUERY_DATE}.json"
+        LATEST_TARGET="$TARGET_DATA_DIR/kg_evaluation_queries.json"
+        if [[ "$(realpath "$QUERIES_FILE")" != "$(realpath "$DATED_TARGET" 2>/dev/null)" ]]; then
+            ln -sf "$QUERIES_FILE" "$DATED_TARGET"
+        fi
+        ln -sf "kg_evaluation_queries_${QUERY_DATE}.json" "$LATEST_TARGET"
     fi
 
     # 构建 DuckDB
@@ -470,7 +498,7 @@ if [[ -z "${HF_TOKEN:-}" && -f "$HOLYEVAL_DIR/.env" ]]; then
     export HF_TOKEN
 fi
 
-HF_EXTRA_ARGS=()
+HF_EXTRA_ARGS=(--query-date "$QUERY_DATE")
 if [[ "$KG_QUERY_ONLY" == true ]]; then
     HF_EXTRA_ARGS+=(--kg-query-only)
 fi
@@ -515,7 +543,7 @@ done  # END batch loop over EMAIL_LIST
 # ============================================================
 
 ESLBENCH_DIR="$HOLYEVAL_DIR/benchmark/data/eslbench"
-DATE_TAG="$(date +%Y%m%d)"
+DATE_TAG="$QUERY_DATE"
 FULL_MID="$ESLBENCH_DIR/full_mid.jsonl"
 FULL_ESLBENCH="$ESLBENCH_DIR/full-${DATE_TAG}.jsonl"
 
@@ -534,7 +562,7 @@ if [[ -f "$JSONL_FILE" ]]; then
     fi
 
     # 从 full_mid.jsonl 生成 sample50 + sample500
-    GEN_ESLBENCH_ARGS=(--jsonl "$FULL_MID" --seed "$SEED")
+    GEN_ESLBENCH_ARGS=(--jsonl "$FULL_MID" --seed "$SEED" --date-tag "$DATE_TAG")
     if [[ "$UPLOAD_ESLBENCH" == true ]]; then
         GEN_ESLBENCH_ARGS+=(--upload-eslbench --eslbench-repo "$ESLBENCH_REPO" --eslbench-batch "$ESLBENCH_BATCH")
     fi

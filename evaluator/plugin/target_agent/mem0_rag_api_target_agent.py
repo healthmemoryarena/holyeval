@@ -262,6 +262,7 @@ class Mem0RagApiTargetAgent(AbstractTargetAgent, name="mem0_rag_api", params_mod
         ),
         "color": "#f59e0b",
         "features": ["RAG", "记忆管理", "mem0"],
+        "icon_url": "/static/images/agents/mem0.png",
     }
     _cost_meta = {
         "est_input_tokens": 8000,

@@ -24,6 +24,7 @@ HOLYEVAL_VENV="$HOLYEVAL_DIR/.venv/bin/python"
 JSONL_FILE=""
 SAMPLE_N_PER_DIM="10,100"
 SEED=42
+DATE_TAG=""
 UPLOAD_ESLBENCH=false
 ESLBENCH_REPO="${ESLBENCH_HF_REPO:-healthmemoryarena/ESL-Bench}"
 ESLBENCH_BATCH="${ESLBENCH_HF_BATCH:-202604}"
@@ -38,6 +39,7 @@ while [[ $# -gt 0 ]]; do
         --jsonl) JSONL_FILE="$2"; shift 2 ;;
         --sample-n-per-dim) SAMPLE_N_PER_DIM="$2"; shift 2 ;;
         --seed) SEED="$2"; shift 2 ;;
+        --date-tag) DATE_TAG="$2"; shift 2 ;;
         --upload-eslbench) UPLOAD_ESLBENCH=true; shift ;;
         --eslbench-repo) ESLBENCH_REPO="$2"; shift 2 ;;
         --eslbench-batch) ESLBENCH_BATCH="$2"; shift 2 ;;
@@ -68,7 +70,9 @@ fi
 # ============================================================
 
 ESLBENCH_DIR="$HOLYEVAL_DIR/benchmark/data/eslbench"
-DATE_TAG="$(date +%Y%m%d)"
+if [[ -z "$DATE_TAG" ]]; then
+    DATE_TAG="$(date +%Y%m%d)"
+fi
 INPUT_COUNT=$(wc -l < "$JSONL_FILE")
 
 echo ""
@@ -78,6 +82,12 @@ IFS=',' read -ra SAMPLE_SIZES <<< "$SAMPLE_N_PER_DIM"
 for N_PER_DIM in "${SAMPLE_SIZES[@]}"; do
     SAMPLE_TOTAL=$((N_PER_DIM * 5))
     SAMPLE_FILE="$ESLBENCH_DIR/sample${SAMPLE_TOTAL}-${DATE_TAG}.jsonl"
+
+    if [[ -f "$SAMPLE_FILE" && "$SAMPLE_FILE" -nt "$JSONL_FILE" ]]; then
+        EXISTING_COUNT=$(wc -l < "$SAMPLE_FILE")
+        echo "  → $SAMPLE_FILE 已存在 ($EXISTING_COUNT 条) 且比源文件新，跳过"
+        continue
+    fi
 
     "$HOLYEVAL_VENV" -c "
 import json, random
