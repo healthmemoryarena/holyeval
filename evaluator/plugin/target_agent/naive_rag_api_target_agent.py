@@ -293,8 +293,8 @@ class NaiveRagApiTargetInfo(BaseModel):
         "gemini-3-flash-preview",
         "anthropic/claude-opus-4.6",
         "anthropic/claude-sonnet-4.6",
-        "minimax/minimax-m2.5",
-        "z-ai/glm-5",
+        "minimax/minimax-m2.7",
+        "z-ai/glm-5.1",
     ] = Field(description="生成模型名称")
     embedding_model: str = Field("text-embedding-3-large", description="嵌入模型")
     data_group: str = Field(description="数据目录（benchmark 名称，如 'thetagen'）")
