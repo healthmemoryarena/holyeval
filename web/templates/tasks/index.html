@@ -610,6 +610,17 @@ function taskManager() {
                     }
                 }
             }
+            // Hermes: 自动探测当前模型名
+            if (this.form.target_type === 'hermes') {
+                fetch('/api/agents/hermes/status')
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.ready && data.model) {
+                            this.targetValues['model'] = data.model;
+                        }
+                    })
+                    .catch(() => {});
+            }
         },
         get targetFields() {
             const schema = this.targetSchemas[this.form.target_type];

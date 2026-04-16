@@ -25,6 +25,7 @@ env/
 Thumbs.db
 # Benchmark reports (runtime output)
 benchmark/report/**/*.json
+benchmark/report/**/*.md
 benchmark/report/.checkpoints/
 benchmark/report/.live/
 benchmark/report/.tasks/
@@ -42,8 +43,13 @@ htmlcov/
 # Environment
 .env
 .env.local
+
+# GUI Agent 运行产物
+scripts/gui_agent/gui_agent_runs/
+
 # Claude Code
 .claude/settings.local.json
+CODE_REVIEW.md
 web.log
 data_local
 .specstory/

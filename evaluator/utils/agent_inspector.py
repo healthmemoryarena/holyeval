@@ -94,6 +94,7 @@ class _AgentMeta:
     icon: str  # SVG path data (heroicons outline, 24x24 viewBox)
     color: str  # CSS 颜色值
     features: list[str] = field(default_factory=list)
+    icon_url: str = ""  # 产品 logo 图片路径（优先于 SVG icon 展示）
 
 
 # 未声明 _display_meta 的 plugin 使用此默认值
@@ -158,6 +159,7 @@ def _resolve_meta(cls: type) -> _AgentMeta:
             icon=plugin_meta.get("icon", _DEFAULT_META.icon),
             color=plugin_meta.get("color", _DEFAULT_META.color),
             features=plugin_meta.get("features", []),
+            icon_url=plugin_meta.get("icon_url", ""),
         )
     return _DEFAULT_META
 
@@ -197,6 +199,7 @@ def _inspect_registry(registry: Dict[str, Type], config_map: Dict[str, type]) ->
                 features=meta.features,
                 icon=meta.icon,
                 color=meta.color,
+                icon_url=meta.icon_url,
                 config_schema=schema,
                 config_examples=examples,
                 cost_meta=_resolve_cost_meta(cls),

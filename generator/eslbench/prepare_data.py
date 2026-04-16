@@ -97,7 +97,7 @@ def _check_download_complete(data_dir: Path) -> bool:
     if not user_dirs:
         return False
     for d in user_dirs:
-        if not (d / "kg_evaluation_queries.json").exists():
+        if not (d / "profile.json").exists():
             return False
     return True
 
@@ -167,6 +167,8 @@ def download_from_hf(data_dir: Path, *, label: str = "eslbench", force: bool = F
             dst_dir.mkdir(parents=True, exist_ok=True)
             for src_file in src_dir.iterdir():
                 if src_file.is_file() and src_file.suffix == ".json":
+                    if src_file.name.startswith("kg_evaluation_queries"):
+                        continue  # ground-truth 不复制到本地 .data/
                     shutil.copy2(str(src_file), str(dst_dir / src_file.name))
                     copied += 1
         total_copied += copied
@@ -176,6 +178,18 @@ def download_from_hf(data_dir: Path, *, label: str = "eslbench", force: bool = F
     _save_local_manifest(remote_manifest, data_dir)
     print(f"[{label}] 下载完成: {len(batches_to_download)} 个批次, {total_copied} 个文件")
     return data_dir, total_copied > 0
+
+
+def purge_ground_truth(data_dir: Path, *, label: str = "eslbench") -> int:
+    """删除 .data/ 下所有用户目录中的 kg_evaluation_queries*.json（ground-truth）"""
+    removed = 0
+    for user_dir in discover_user_dirs(data_dir):
+        for f in user_dir.glob("kg_evaluation_queries*.json"):
+            f.unlink()
+            removed += 1
+    if removed:
+        print(f"[{label}] 清理 ground-truth 文件: {removed} 个")
+    return removed
 
 
 # ==================== Step 2: Per-user DuckDB ====================
@@ -419,7 +433,7 @@ def _check_local_complete_eslbench() -> bool:
     if not user_dirs:
         return False
     for d in user_dirs:
-        if not (d / "kg_evaluation_queries.json").exists():
+        if not (d / "profile.json").exists():
             return False
         if not (d / "user.duckdb").exists():
             return False
@@ -449,6 +463,9 @@ def main():
     # Step 1: 从 HuggingFace 下载（检测远端变更）
     print("\n--- Step 1: 下载 HuggingFace 数据 ---")
     _, data_changed = download_from_hf(DATA_DIR, label="eslbench", force=force)
+
+    # 清理 ground-truth（兼容旧数据: 新下载已跳过复制，此处清理历史遗留文件）
+    purge_ground_truth(DATA_DIR, label="eslbench")
 
     # 远端数据有变更时，级联重建 DuckDB
     rebuild = force or data_changed

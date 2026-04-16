@@ -237,8 +237,9 @@ class TaskManager:
         matched_ids = dataset_ids & submitted_ids
 
         if not matched_ids:
-            raise ValueError(
-                f"No matching cases: {len(submitted_ids)} submitted, {len(dataset_ids)} in dataset, 0 IDs matched"
+            logger.warning(
+                "No matching cases: %d submitted, %d in dataset, 0 IDs matched — all cases scored as 0",
+                len(submitted_ids), len(dataset_ids),
             )
 
         # 2. Convert (matched only)

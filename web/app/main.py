@@ -1,8 +1,10 @@
 """FastAPI app factory + route registration"""
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -33,6 +35,14 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    dsn = os.environ.get("HOLYEVAL_PY_SENTRY_DSN")
+    if dsn:
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=(os.environ.get("ENV") or "").upper() or None,
+            traces_sample_rate=1.0,
+        )
+
     app = FastAPI(title="HolyEval Web UI", lifespan=lifespan)
 
     # Static files

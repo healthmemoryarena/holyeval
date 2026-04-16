@@ -230,8 +230,8 @@ class Mem0RagApiTargetInfo(BaseModel):
         "gemini-3-flash-preview",
         "anthropic/claude-opus-4.6",
         "anthropic/claude-sonnet-4.6",
-        "minimax/minimax-m2.5",
-        "z-ai/glm-5",
+        "minimax/minimax-m2.7",
+        "z-ai/glm-5.1",
     ] = Field(description="生成模型名称")
     embedding_model: str = Field(
         "text-embedding-3-large",
@@ -262,6 +262,7 @@ class Mem0RagApiTargetAgent(AbstractTargetAgent, name="mem0_rag_api", params_mod
         ),
         "color": "#f59e0b",
         "features": ["RAG", "记忆管理", "mem0"],
+        "icon_url": "/static/images/agents/mem0.png",
     }
     _cost_meta = {
         "est_input_tokens": 8000,

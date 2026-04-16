@@ -443,6 +443,18 @@ def bench_item_to_test_case(
         if theta_override and isinstance(theta_override, dict) and "email" in theta_override:
             matched_override = {"user_email": theta_override["email"]}
 
+    # 跨族 fallback: hermes 从 llm_api.tool_context.user_email 或 theta_api.email 推导 user_email
+    if matched_override is None and spec.type == "hermes":
+        llm_override = item.user.target_overrides.get("llm_api")
+        if llm_override and isinstance(llm_override, dict):
+            tool_ctx = llm_override.get("tool_context")
+            if isinstance(tool_ctx, dict) and "user_email" in tool_ctx:
+                matched_override = {"user_email": tool_ctx["user_email"]}
+        if matched_override is None:
+            theta_override = item.user.target_overrides.get("theta_api")
+            if theta_override and isinstance(theta_override, dict) and "email" in theta_override:
+                matched_override = {"user_email": theta_override["email"]}
+
     effective_target = resolve_effective_target(spec, cli_overrides, matched_override)
     user_dict = item.user.model_dump(exclude={"target_overrides"})
     user_info = _USER_ADAPTER.validate_python(user_dict)

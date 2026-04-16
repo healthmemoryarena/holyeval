@@ -453,7 +453,7 @@ function reportViewer(benchmark, filename) {
                 const resp = mem.target_response;
                 if (resp) {
                     const msgs = resp.message_list || [];
-                    const text = msgs.map(m => m.content || '').join('\n').trim();
+                    const text = msgs.filter(m => !m.type || m.type === 'reply').map(m => m.content || '').join('\n').trim();
                     const toolCalls = resp.tool_calls || [];
                     if (text || toolCalls.length) {
                         dialogue.push({

@@ -914,8 +914,8 @@ class HippoRagApiTargetInfo(BaseModel):
         "gemini-3-flash-preview",
         "anthropic/claude-opus-4.6",
         "anthropic/claude-sonnet-4.6",
-        "minimax/minimax-m2.5",
-        "z-ai/glm-5",
+        "minimax/minimax-m2.7",
+        "z-ai/glm-5.1",
     ] = Field(description="Generation model name (default gemini-3-flash-preview, aligned with remote HippoRAG)")
     embedding_model: str = Field(
         "text-embedding-3-large",
@@ -953,6 +953,7 @@ class HippoRagApiTargetAgent(AbstractTargetAgent, name="hippo_rag_api", params_m
         ),
         "color": "#8b5cf6",
         "features": ["RAG", "Vector Search", "HippoRAG"],
+        "icon_url": "/static/images/agents/hipporag.png",
     }
     _cost_meta = {
         "est_input_tokens": 8000,

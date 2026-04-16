@@ -104,6 +104,7 @@ class LlmApiTargetInfo(BaseModel):
     type: Literal["llm_api"] = Field(description="Target type")
     model: Literal[
         "gpt-5.4",
+        "gpt-5.4-mini",
         "gpt-5.2",
         "gpt-4.1",
         "gemini-3.1-pro-preview",
@@ -112,8 +113,8 @@ class LlmApiTargetInfo(BaseModel):
         "gemini-3-flash-preview",
         "anthropic/claude-opus-4.6",
         "anthropic/claude-sonnet-4.6",
-        "minimax/minimax-m2.5",
-        "z-ai/glm-5",
+        "minimax/minimax-m2.7",
+        "z-ai/glm-5.1",
     ] = Field(description="Model name")
     system_prompt: Optional[str] = Field(None, description="System prompt (uses default prompt if not specified)")
     tool_group: Optional[str] = Field(

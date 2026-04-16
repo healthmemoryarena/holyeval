@@ -18,9 +18,14 @@
                     <!-- Header: icon + name + class + features -->
                     <div class="flex items-start gap-4">
                         <div class="agent-icon-wrapper" :style="'background-color:' + agent.color + '15; color:' + agent.color">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" :d="agent.icon"/>
-                            </svg>
+                            <template x-if="agent.icon_url">
+                                <img :src="agent.icon_url" class="w-5 h-5 rounded" alt="">
+                            </template>
+                            <template x-if="!agent.icon_url">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" :d="agent.icon"/>
+                                </svg>
+                            </template>
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2.5 mb-1">

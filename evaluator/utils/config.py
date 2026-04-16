@@ -42,3 +42,16 @@ def get_config(key: str, default: Any = None) -> Any:
 def get_agent_llm_timeout() -> int:
     """获取 Agent LLM 调用超时时间（秒），默认 840s（14分钟）"""
     return int(get_config("AGENT_LLM_TIMEOUT", 840))
+
+
+def get_theta_api_config() -> dict[str, Any]:
+    """获取 Theta API 相关配置"""
+    return {
+        "base_url": get_config("THETA_API_BASE_URL", "https://test-mcp.thetahealth.ai"),
+        "timeout": 180,
+        "poll_interval": 1.0,
+        "poll_timeout": 300,
+        "chat_api_path": get_config("THETA_API_CHAT_PATH", "/api/v1/holywell/chat/create_message_v2"),
+        "list_message_path": get_config("THETA_API_LIST_MESSAGE_PATH", "/api/v1/holywell/chat/list_message"),
+        "indicator_api_path": "/api/v1/holywell/health-indicator/watch",
+    }
