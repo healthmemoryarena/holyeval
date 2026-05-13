@@ -31,6 +31,7 @@ theta-smart 是一个健康管理 AI 助手，核心场景：
 | Dataset | Cases | 用途 |
 |---------|-------|------|
 | `smoke` | 5 | 快速验证 |
+| `smoke2` | 5 | 多模态 + 笼统场景烟测（含图片上传、PDF 上传、图表绘制、笼统提问、严格混合回放） |
 | `core` | 15 | 完整覆盖所有 record 类型 |
 | `l2_core` | 12 | Layer 2 LLM-as-judge（3 场景 × 4 虚拟患者组合） |
 | `l2_hard` | 9 | Layer 2 对抗性场景（矛盾信息 + 危险行为 + 长对话记忆） |
@@ -69,9 +70,35 @@ theta-smart 后端使用独立的 API 路径（`/api/v1/chat/create_message` + `
 # smoke
 uv run python -m benchmark.basic_runner dialogue_quality smoke --target-type theta_smart_api -p 1 -v
 
+# smoke2（多模态 + 笼统场景，5 条，~6 分钟）
+uv run python -m benchmark.basic_runner dialogue_quality smoke2 --target-type theta_smart_api -p 1 -v
+
 # core
 uv run python -m benchmark.basic_runner dialogue_quality core --target-type theta_smart_api -p 1 -v
 ```
+
+#### smoke2 场景说明（使用 `rubric` evaluator）
+
+smoke2 全套迁移到通用的 `rubric` evaluator（[`evaluator/plugin/eval_agent/rubric_eval_agent.py`](../../../evaluator/plugin/eval_agent/rubric_eval_agent.py)），返回 `result="scored"` + 连续 `score`，不再做 pass/fail 判定。
+
+| id | 输入 | 附件 | 主要考察点 |
+|---|---|---|---|
+| `dq_s2_xray_upload_001` | 单轮 | X 光片 PNG | 识别左右手+具体骨折位置 / 紧急程度判断 / 临时处理 / 防虚构 / latency |
+| `dq_s2_pdf_report_002` | 单轮 | PDF 体检总结 | 命中 ≥3 项阳性发现 / 数值忠实 / 不过诊 / 不泛泛甩锅给医院 |
+| `dq_s2_vague_report_003` | 单轮 | —— | 引用真实档案 ≥3 项 / 防编造病名 / **必须渲染图表+表格** / 信息密度高 / ≤3000 字 |
+| `dq_s2_sleep_chart_004` | 2 轮纯提问（无记录） | —— | AI 主动画图（第 2 轮"看下趋势"必出图）/ 趋势解读 / 数据忠实 |
+| `dq_s2_hard_mixed_strict_005` | 4 轮混合 (`user1@demo`) | —— | record_ack 简洁回显 / retrieval 完整回放 / 严格 latency |
+
+每个 case 由 per-turn 配置驱动：`latency`（total_seconds / ttft_seconds，piecewise 打分）+ `criteria`（llm_rubric 自然语言描述 或 signal_check 本地断言）。参考 `evaluator/plugin/eval_agent/rubric_eval_agent.py` 的 schema。
+
+内置 signal（`evaluator/plugin/signals/builtin.py`）：`has_chart` / `has_table` / `char_count` / `md_image_count` / `tool_calls_count` / `has_annotation`。新增 signal = 加一个 `@register_signal` 函数，evaluator 源码不变。
+
+附件走 OSS 公开直链（CDN：`https://static.thetahealth.ai/benchmark/dialogue_quality/smoke2/...`），用例 JSONL 里的 `attachments` 字段直接写链接和元信息，target agent 原样塞进被测后端的 `file_list` 字段：
+
+- Schema：`AttachmentRef` 定义在 `evaluator/core/schema.py`，任何 dataset、任何 user type（manual/auto）都能用。
+- 上传新 fixture：用 `backend/scripts/upload_smoke2_fixtures.py` 的流程，调 `POST /api/v1/file-upload/upload?public=true&folder=benchmark/<benchmark>/<dataset>`。
+
+TTFT（首 token 时延）由 `theta_smart_api` target 在轮询循环里记录首个 reply chunk 到达时间，以 `{"type":"latency","content":{"first_token_ms":N}}` meta 项塞进 `message_list`。不支持 TTFT 的 target 自动跳过该维度打分，不扣分。
 
 ### Running Layer 2
 

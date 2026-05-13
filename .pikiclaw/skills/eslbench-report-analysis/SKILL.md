@@ -487,6 +487,57 @@ Each exported case contains:
 - **Multiple runs of same model**: Take the latest or lowest-fail run; early runs may have config bugs
 - **`s/q` (seconds per query)**: Dominated by retrieval + generation time; <30s usually means cached/fast path
 
+## Per-Agent Performance Analysis (Verified Runs Only)
+
+**Filter criteria**: Only include runs where `fail_rate < 40%` AND `scored_count > 30` (i.e. at least 30 successfully scored answers). This excludes partial/broken runs and ensures statistically meaningful comparisons.
+
+When multiple runs of the same agent exist, **keep only the latest run** that passes the filter (by timestamp in filename).
+
+### Agent Performance Table
+
+Generate a `## Agent Performance (Verified)` section with a filtered, deduplicated table:
+
+```python
+def get_verified_agents(rows):
+    """Filter to verified runs: fail_rate < 40% and scored > 30. Deduplicate by agent, keep latest."""
+    verified = []
+    for r in rows:
+        scored = r["n"] - r["fail_n"]
+        fail_rate = r["fail_n"] / r["n"] if r["n"] else 1.0
+        if fail_rate < 0.40 and scored > 30:
+            verified.append(r)
+
+    # Deduplicate: extract agent key (target_type + model), keep latest by filename timestamp
+    from collections import OrderedDict
+    by_agent = OrderedDict()
+    for r in sorted(verified, key=lambda x: x["label"]):
+        # Extract agent key: everything before the date_time suffix
+        # e.g. "sample50-20260407_llm_api_gpt-5.4" from "sample50-20260407_llm_api_gpt-5.4_20260407_190032.json"
+        parts = r["label"].rsplit("_", 2)  # split off YYYYMMDD_HHMMSS.json
+        agent_key = parts[0] if len(parts) >= 3 else r["label"]
+        if agent_key not in by_agent or r["label"] > by_agent[agent_key]["label"]:
+            by_agent[agent_key] = r
+    return list(by_agent.values())
+```
+
+### Table Format
+
+```
+| Agent | Look | Trend | Comp | Anom | Expl | Avg% | Scored | Fail | s/q | InTok |
+```
+
+Sort by `Avg%` descending. This is the **primary comparison table** — the Score Overview shows all raw runs, this shows only verified, deduplicated results.
+
+### Per-Agent Dimension Radar Summary
+
+For each verified agent, add a one-line text radar showing relative strengths:
+
+```
+gpt-5.4: Trend(70.0) > Anom(57.1) > Comp(44.4) > Look(30.1) > Expl(14.2)
+```
+
+This helps quickly identify each agent's strength/weakness profile.
+
 ## Output to File
 
 When saving analysis, produce **two files**:
@@ -497,6 +548,7 @@ When saving analysis, produce **two files**:
    - `## Summary` — the 6-point free-form analysis
    - `## Fail Reason Breakdown` — per-report sub-classification of fails (Timeout/Orchestrator/Async/other), only for reports with fail_count > 0
    - `## Cross-Agent Error Patterns` — the cross-agent dimension comparison table (if multiple agent types present)
+   - `## Agent Performance (Verified)` — deduplicated table of agents with fail_rate < 40% and scored > 30, plus per-agent dimension radar
    - `## Error Distribution` — aggregate error category and difficulty counts
 2. **Error cases JSON**: `docs/eslbench_error_cases-YYYYMMDD.json` — all low-score/failed cases for debugging
 
@@ -518,7 +570,7 @@ Error cases: docs/eslbench_error_cases-20260401.json (N cases)
 **After writing the markdown report, MUST run this verification before completing:**
 
 ```bash
-REQUIRED_SECTIONS=("## Processed Report Files" "## Score Overview" "## Summary" "## Fail Reason Breakdown" "## Cross-Agent Error Patterns" "## Error Distribution")
+REQUIRED_SECTIONS=("## Processed Report Files" "## Score Overview" "## Summary" "## Fail Reason Breakdown" "## Cross-Agent Error Patterns" "## Agent Performance (Verified)" "## Error Distribution")
 MISSING=()
 for section in "${REQUIRED_SECTIONS[@]}"; do
   grep -qF "$section" "$OUTPUT_FILE" || MISSING+=("$section")
@@ -534,3 +586,4 @@ fi
 If any section is MISSING, add it to the report file before completing. Exceptions:
 - `## Fail Reason Breakdown` may be omitted ONLY if ALL reports have `fail_count == 0`
 - `## Cross-Agent Error Patterns` may be omitted ONLY if all reports are from the same agent type
+- `## Agent Performance (Verified)` may be omitted ONLY if no runs pass the filter (fail_rate < 40% AND scored > 30)

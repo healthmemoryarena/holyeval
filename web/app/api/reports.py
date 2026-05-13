@@ -21,6 +21,8 @@ async def get_report(benchmark: str, filename: str) -> dict[str, Any]:
         return get_report_content(benchmark, filename)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/reports/{benchmark}/{filename}")

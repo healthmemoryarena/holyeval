@@ -72,7 +72,10 @@ def list_reports() -> list[ReportEntry]:
 
 def get_report_content(benchmark: str, filename: str) -> dict[str, Any]:
     """读取单份报告内容"""
-    report_path = _REPORT_DIR / benchmark / filename
+    report_path = (_REPORT_DIR / benchmark / filename).resolve()
+    # 安全检查：确保路径在 report 目录内
+    if not report_path.is_relative_to(_REPORT_DIR.resolve()):
+        raise ValueError("非法路径")
     if not report_path.exists():
         raise FileNotFoundError(f"报告不存在: {benchmark}/{filename}")
     with open(report_path, "r", encoding="utf-8") as f:
@@ -83,7 +86,7 @@ def delete_report(benchmark: str, filename: str) -> None:
     """删除单份报告文件"""
     report_path = (_REPORT_DIR / benchmark / filename).resolve()
     # 安全检查：确保路径在 report 目录内
-    if not str(report_path).startswith(str(_REPORT_DIR.resolve())):
+    if not report_path.is_relative_to(_REPORT_DIR.resolve()):
         raise ValueError("非法路径")
     if not report_path.exists():
         raise FileNotFoundError(f"报告不存在: {benchmark}/{filename}")

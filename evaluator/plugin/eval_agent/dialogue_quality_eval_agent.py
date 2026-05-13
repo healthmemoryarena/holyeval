@@ -30,7 +30,7 @@ Config example:
 import json
 import logging
 import re
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel, ConfigDict, Field
@@ -168,6 +168,27 @@ class DialogueQualityEvalInfo(BaseModel):
     dimensions: Dict[str, float] = Field(default_factory=lambda: dict(_DEFAULT_DIMENSIONS), description="维度名 → 权重")
     threshold: float = Field(default=0.6, ge=0.0, le=1.0, description="Pass threshold (0-1)")
     judge_model: str = Field(default="gpt-4.1", description="Judge LLM model")
+    user_context: Optional[str] = Field(
+        default=None,
+        description=(
+            "覆盖传给 judge 的『用户背景』。"
+            "设置后优先生效；未设则回退到 user_info.context。"
+            "用于 manual 用户（无 context 字段）或需要在评测阶段改口径时。"
+        ),
+    )
+    user_goal: Optional[str] = Field(
+        default=None,
+        description=(
+            "覆盖传给 judge 的『对话目标』。优先级同 user_context。"
+        ),
+    )
+    extra_criteria: Optional[str] = Field(
+        default=None,
+        description=(
+            "追加到 judge prompt 末尾的『特殊评分规则』。"
+            "用于按 case 打补丁，比如 case 3 这种无数据场景要压住泛泛的 comprehensiveness 分。"
+        ),
+    )
 
 
 class DialogueQualityEvalAgent(
@@ -194,9 +215,18 @@ class DialogueQualityEvalAgent(
             return EvalResult(result="fail", score=0.0, feedback="No dialogue content to evaluate")
 
         # 2. Build judge prompt (with persona-aware criteria)
-        user_context = self.user_info.context if self.user_info else "（未提供）"
-        user_goal = self.user_info.goal if self.user_info and hasattr(self.user_info, "goal") else "（未提供）"
-        prompt = self._build_judge_prompt(user_context, user_goal, dialogue)
+        # eval-config overrides > user_info > fallback string
+        user_context = (
+            cfg.user_context
+            or (self.user_info.context if self.user_info and getattr(self.user_info, "context", None) else None)
+            or "（未提供）"
+        )
+        user_goal = (
+            cfg.user_goal
+            or (self.user_info.goal if self.user_info and getattr(self.user_info, "goal", None) else None)
+            or "（未提供）"
+        )
+        prompt = self._build_judge_prompt(user_context, user_goal, dialogue, cfg.extra_criteria)
 
         # 3. Call judge LLM (with retry on failure or parse error)
         max_retries = 2
@@ -257,7 +287,13 @@ class DialogueQualityEvalAgent(
             trace=EvalTrace(eval_detail={"dimensions": dimensions_result, "overall_comment": overall_comment}),
         )
 
-    def _build_judge_prompt(self, user_context: str, user_goal: str, formatted_dialogue: str) -> str:
+    def _build_judge_prompt(
+        self,
+        user_context: str,
+        user_goal: str,
+        formatted_dialogue: str,
+        extra_criteria: Optional[str] = None,
+    ) -> str:
         """Build the complete judge prompt, including persona-specific criteria if applicable."""
         prompt = _JUDGE_PROMPT.format(
             user_context=user_context,
@@ -267,6 +303,11 @@ class DialogueQualityEvalAgent(
         persona_criteria = self._build_persona_criteria(self.user_info)
         if persona_criteria:
             prompt += f"\n\n## 特殊评分标准（基于用户行为特征）\n\n以下用户具有特殊行为特征，请据此调整评分：\n{persona_criteria}"
+        if extra_criteria:
+            # Case-level criteria land after persona block so they have the last
+            # word when both apply — prevents a soft persona rule from undoing
+            # a hard case rule.
+            prompt += f"\n\n## 用例特定评分规则（优先级最高）\n\n{extra_criteria}"
         return prompt
 
     @staticmethod

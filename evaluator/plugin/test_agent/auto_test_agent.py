@@ -228,16 +228,28 @@ class AutoTestAgent(AbstractTestAgent, name="auto"):
 
         # ---- 1. If there are remaining strict_inputs, send directly ----
         strict_index = self.current_turn - 1  # current_turn already incremented in do_generate
+        # Per-turn attachments are addressed by turn number (1-based). Shared
+        # between strict_inputs branch and the LLM-driven branch below —
+        # whichever turn fires, the matching attachments ride along.
+        turn_attachments = [
+            a for a in getattr(self.user_info, "attachments", []) or []
+            if a.turn == self.current_turn
+        ]
         if strict_index < len(self.user_info.strict_inputs):
             forced_text = self.user_info.strict_inputs[strict_index]
             logger.info(
-                "[TestAgent] Turn %d — using strict_input[%d]: %s",
+                "[TestAgent] Turn %d — using strict_input[%d]: %s%s",
                 self.current_turn,
                 strict_index,
                 _truncate(forced_text, 100),
+                f" (+{len(turn_attachments)} attachment(s))" if turn_attachments else "",
             )
             return TestAgentReaction(
-                action=TestAgentAction(type="semantic", semantic_content=forced_text),
+                action=TestAgentAction(
+                    type="semantic",
+                    semantic_content=forced_text,
+                    attachments=turn_attachments,
+                ),
                 reason="forced input",
                 is_finished=False,
             )
@@ -332,7 +344,11 @@ class AutoTestAgent(AbstractTestAgent, name="auto"):
                 result.data.next_fuzzy_action,
             )
             return TestAgentReaction(
-                action=TestAgentAction(type="semantic", semantic_content=content),
+                action=TestAgentAction(
+                    type="semantic",
+                    semantic_content=content,
+                    attachments=turn_attachments,
+                ),
                 next_fuzzy_action=result.data.next_fuzzy_action,
                 reason=result.data.reason,
                 is_finished=is_finished,
@@ -346,7 +362,11 @@ class AutoTestAgent(AbstractTestAgent, name="auto"):
             _truncate(result.content, 100),
         )
         return TestAgentReaction(
-            action=TestAgentAction(type="semantic", semantic_content=result.content),
+            action=TestAgentAction(
+                type="semantic",
+                semantic_content=result.content,
+                attachments=turn_attachments,
+            ),
             reason="LLM raw output (structured parsing failed)",
             is_finished=False,
             usage=result.usage,

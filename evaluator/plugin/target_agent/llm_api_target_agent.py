@@ -163,10 +163,13 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
         self._tools: list[BaseTool] | None = None
         self._tool_context_typed: Any = None  # Typed tool_context (eliminates Pydantic serialization warnings)
         self._tool_context_schema: type | None = None
-        if target_config.tool_group:
-            self._tools, context_class = _load_tool_group(target_config.tool_group, target_config.tool_context or {})
+        # Skip tool loading when tool_context is missing — tools that read user data (eslbench/retrieve)
+        # raise on ToolContext(**None) at first invocation. Cases without user_email (factual / citation /
+        # numerical / relational) don't need tools and should answer from model knowledge.
+        if target_config.tool_group and target_config.tool_context:
+            self._tools, context_class = _load_tool_group(target_config.tool_group, target_config.tool_context)
             # Convert dict to ToolContext type declared by the tool module (if available)
-            if context_class is not None and target_config.tool_context:
+            if context_class is not None:
                 self._tool_context_typed = context_class(**target_config.tool_context)
                 self._tool_context_schema = context_class
             else:
@@ -176,6 +179,11 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
                 "[LlmApiTargetAgent] Loaded tool_group=%r with %d tools",
                 target_config.tool_group,
                 len(self._tools),
+            )
+        elif target_config.tool_group:
+            logger.info(
+                "[LlmApiTargetAgent] tool_group=%r declared but no tool_context — skipping tool load",
+                target_config.tool_group,
             )
 
         # Cost tracking (using langchain UsageMetadata)
@@ -248,9 +256,13 @@ class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api", params_model=LlmApi
         )
 
     def get_session_info(self) -> SessionInfo:
-        """When system_prompt contains user health profile, notify EvalAgent to evaluate with 'has user data' rules"""
-        has_user_data = bool(self.config.system_prompt and len(self.config.system_prompt) > 200)
-        return SessionInfo(has_user_data=has_user_data)
+        """Notify EvalAgent that the LLM has access to user-specific data — either via a long
+        system_prompt carrying the health profile, or via tool_context exposing user_email
+        (tool-based retrieval path). Without this, contextual hallucination judges fall back
+        to the 'base model — no access' rubric and penalise correct tool-fetched answers."""
+        has_profile_in_prompt = bool(self.config.system_prompt and len(self.config.system_prompt) > 200)
+        has_user_email_in_tools = bool(self.config.tool_context and self.config.tool_context.get("user_email"))
+        return SessionInfo(has_user_data=has_profile_in_prompt or has_user_email_in_tools)
 
     def _extract_user_input(self, test_action: TestAgentAction) -> str:
         """Extract user input from TestAgentAction"""

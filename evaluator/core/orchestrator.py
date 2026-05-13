@@ -778,22 +778,30 @@ async def do_eval_only(
 
 
 async def do_batch_eval(
-    items: List[tuple[TestCase, list[TestAgentMemory]]],
+    items: List[tuple[TestCase, list[TestAgentMemory]]] | List[tuple[TestCase, list[TestAgentMemory], Any]],
     max_concurrency: int = 0,
     on_progress: Callable[[TestResult], None] | None = None,
 ) -> TestReport:
     """批量仅评测 — 并发执行多条对话的评测
 
     Args:
-        items:           [(TestCase, memory_list)] 列表
+        items:           [(TestCase, memory_list)] 或 [(TestCase, memory_list, session_info)] 列表
+                         session_info 用于让 judge 区分 theta-target vs 基模（is_theta_target 标志）;
+                         省略时一律按基模评测。
         max_concurrency: 最大并发数，0 表示不限制
         on_progress:     每条评测完成时的回调（用于实时进度跟踪）
     """
     total = len(items)
     logger.info("do_batch_eval 开始: %d 条对话 (max_concurrency=%s)", total, max_concurrency or "unlimited")
 
-    async def _run_one(tc: TestCase, mem: list[TestAgentMemory]) -> TestResult:
-        result = await do_eval_only(tc, mem)
+    def _unpack(tup):
+        if len(tup) == 3:
+            return tup[0], tup[1], tup[2]
+        return tup[0], tup[1], None
+
+    async def _run_one(tup) -> TestResult:
+        tc, mem, session_info = _unpack(tup)
+        result = await do_eval_only(tc, mem, session_info=session_info)
         if on_progress:
             on_progress(result)
         return result
@@ -801,13 +809,13 @@ async def do_batch_eval(
     if max_concurrency > 0:
         semaphore = asyncio.Semaphore(max_concurrency)
 
-        async def _run_with_sem(tc: TestCase, mem: list[TestAgentMemory]) -> TestResult:
+        async def _run_with_sem(tup) -> TestResult:
             async with semaphore:
-                return await _run_one(tc, mem)
+                return await _run_one(tup)
 
-        results = list(await asyncio.gather(*[_run_with_sem(tc, mem) for tc, mem in items]))
+        results = list(await asyncio.gather(*[_run_with_sem(t) for t in items]))
     else:
-        results = list(await asyncio.gather(*[_run_one(tc, mem) for tc, mem in items]))
+        results = list(await asyncio.gather(*[_run_one(t) for t in items]))
 
     report = _build_report(results)
     logger.info(
