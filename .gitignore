@@ -29,6 +29,7 @@ benchmark/report/**/*.md
 benchmark/report/.checkpoints/
 benchmark/report/.live/
 benchmark/report/.tasks/
+benchmark/trace/
 # Benchmark prepare data (runtime generated)
 benchmark/data/**/.data/
 benchmark/data/**/.dyg_work_dirs/
@@ -43,12 +44,12 @@ htmlcov/
 # Environment
 .env
 .env.local
-
 # GUI Agent 运行产物
 scripts/gui_agent/gui_agent_runs/
-
 # Claude Code
 .claude/settings.local.json
+.claude/holyeval_claude_bak/
+.claude/scheduled_tasks.lock
 CODE_REVIEW.md
 web.log
 data_local

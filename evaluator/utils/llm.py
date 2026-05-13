@@ -144,6 +144,13 @@ async def do_execute(
         # Google Gemini 模型
         provider = "google_genai"
         use_openrouter = False
+        # Remote config 可能强制 GOOGLE_GENAI_USE_VERTEXAI=true（生产 Vertex 路径）。
+        # 本地评测没有 gcloud ADC 凭证时会失败，回退到 GOOGLE_API_KEY 直连 Generative Language API。
+        # 显式 export GOOGLE_GENAI_USE_VERTEXAI=true 时不覆盖（让用户保留主动选择）。
+        import os as _os
+        if _os.environ.get("GOOGLE_API_KEY") and not _os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            for _k in ("GOOGLE_GENAI_USE_VERTEXAI", "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION"):
+                _os.environ.pop(_k, None)
     else:
         # 其他模型通过 OpenRouter 调用（如 anthropic/claude-3.7-sonnet）
         provider = "openai"

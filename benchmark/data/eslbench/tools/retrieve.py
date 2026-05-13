@@ -32,7 +32,9 @@ logger = logging.getLogger(__name__)
 _DOT_DATA = Path(__file__).resolve().parents[1] / ".data"
 _ALLOWED_EXTENSIONS = {".json"}
 _BLOCKED_FILES = {"events.json"}
-_BLOCKED_PREFIXES = ("kg_evaluation_queries",)
+# 前缀屏蔽：kg_evaluation_queries 是评测题库（包含 GT），"." 屏蔽 .openie_cache.json
+# 等历史 RAG 评测产物（包含 OpenIE 三元组，等于已剥离的 KG 关系字段）。
+_BLOCKED_PREFIXES = ("kg_evaluation_queries", ".")
 _FORBIDDEN_SQL = {"INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE"}
 _BLOCKED_TABLES = {"evaluation_queries"}
 
@@ -381,11 +383,22 @@ def _search_json(
     base_path: str = "$",
     max_hits: int = _MAX_JSON_SEARCH_HITS,
     max_nodes: int = _MAX_JSON_SEARCH_NODES,
-) -> list[dict[str, Any]]:
-    """在 JSON 中做结构化搜索，返回 path + preview。"""
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """在 JSON 中做结构化搜索，返回 (hits, scan_meta)。
+
+    scan_meta 用于把工具的实际扫描状态透明返回给调用方：
+    - truncated_lists: 因 _MAX_JSON_SEARCH_LIST_SCAN 被截断的 list 路径列表
+    - nodes_budget_exhausted: True 时节点预算耗尽，"未命中" 可能是假阴性
+    - hit_cap_reached: True 时命中数达 max_hits，可能存在更多匹配
+    """
+    scan_meta: dict[str, Any] = {
+        "truncated_lists": [],
+        "nodes_budget_exhausted": False,
+        "hit_cap_reached": False,
+    }
     kw = keyword.casefold().strip()
     if not kw:
-        return []
+        return [], scan_meta
 
     hits: list[dict[str, Any]] = []
     visited = 0
@@ -412,6 +425,10 @@ def _search_json(
         if isinstance(value, list):
             remaining_budget = max_nodes - visited
             max_scan = min(len(value), _MAX_JSON_SEARCH_LIST_SCAN, max(remaining_budget, 0))
+            if max_scan < len(value):
+                scan_meta["truncated_lists"].append(
+                    {"path": path, "scanned": max_scan, "total": len(value)}
+                )
             for i, item in enumerate(value[:max_scan]):
                 stack.append((f"{path}[{i}]", item))
             continue
@@ -423,7 +440,12 @@ def _search_json(
                 text = f"{text}... (value truncated)"
             hits.append({"path": path, "match": "value", "value_preview": text})
 
-    return hits
+    if len(hits) >= max_hits:
+        scan_meta["hit_cap_reached"] = True
+    if visited >= max_nodes:
+        scan_meta["nodes_budget_exhausted"] = True
+
+    return hits, scan_meta
 
 
 def _norm_text(value: Any) -> str:
@@ -599,9 +621,9 @@ def read_file(
         "2) filter 模式：传 where_key + where_value，按键值过滤 list[dict]，可配合 select 输出字段\n"
         "path/filter 模式均支持 offset 翻页：结果含 total_matches；若有更多，返回 has_more + next_offset。\n"
         "示例:\n"
-        "- query_json('device_data.json', jmes=\"[?date=='2025-10-04'].[date, device_type]\")\n"
+        "- query_json('timeline.json', where_key='entry_type', where_value='event')\n"
         "- query_json('timeline.json', path='$.entries[0]')\n"
-        "- query_json('device_data.json', where_key='date', where_value='2025-10-04', select='date,indicators')"
+        "- query_json('exam_data.json', path='$[0].indicators')"
     )
 )
 def query_json(
@@ -744,21 +766,40 @@ def search_file(
             return f"未找到路径: {path}"
         base_path, base_data = matched[0]
 
-    hits = _search_json(
+    effective_max_hits = max(1, min(max_hits, _MAX_JSON_SEARCH_HITS))
+    hits, scan_meta = _search_json(
         base_data,
         keyword,
         base_path=base_path,
-        max_hits=max(1, min(max_hits, _MAX_JSON_SEARCH_HITS)),
+        max_hits=effective_max_hits,
     )
+
+    truncation_notes: list[str] = []
+    for tl in scan_meta["truncated_lists"][:2]:
+        truncation_notes.append(f"{tl['path']} 仅扫描前 {tl['scanned']}/{tl['total']} 条")
+    if scan_meta["nodes_budget_exhausted"]:
+        truncation_notes.append(f"总扫描节点数达上限 {_MAX_JSON_SEARCH_NODES}")
+    truncation_text = "；".join(truncation_notes)
+
     if not hits:
+        if truncation_text:
+            return (
+                f"未找到匹配内容（搜索范围受限：{truncation_text}；"
+                "此为假阴性可能；建议改用 query_json 的 jmes/path/filter 模式定位子树后再搜索）"
+            )
         return "未找到匹配内容"
 
-    result = {
+    result: dict[str, Any] = {
         "file": filename,
         "keyword": keyword,
         "base_path": base_path,
         "hits": hits,
     }
+    notes = list(truncation_notes)
+    if scan_meta["hit_cap_reached"]:
+        notes.append(f"命中数达上限 {effective_max_hits}，可能存在更多匹配（缩小关键词或加 path 子树定位）")
+    if notes:
+        result["scan_note"] = "；".join(notes)
     rendered = _dumps_json(result, indent=True)
     rendered, _ = _render_truncated(rendered, _MAX_SEARCH_OUTPUT_CHARS)
     return rendered
@@ -1625,68 +1666,16 @@ def _hydrate_exam_indicators(con: Any, ctx: ToolContext) -> None:
 
 
 def _hydrate_events(con: Any, ctx: ToolContext) -> None:
-    # 禁止使用 events.json — 仅建空表保持 schema 兼容
     con.execute("DROP TABLE IF EXISTS events")
-    con.execute(
-        """
-        CREATE TABLE events(
-            user_id VARCHAR,
-            time TIMESTAMP,
-            end_time TIMESTAMP,
-            event_id VARCHAR,
-            event_type VARCHAR,
-            event_name VARCHAR,
-            start_date DATE,
-            duration_days INTEGER,
-            interrupted BOOLEAN,
-            interruption_date DATE
-        )
-        """
-    )
 
 
 def _hydrate_event_indicators(con: Any, ctx: ToolContext) -> None:
-    # 禁止使用 events.json — 仅建空表保持 schema 兼容
+    # 不暴露 expected_change/impact_level 等已剥离的语义关系列名
     con.execute("DROP TABLE IF EXISTS event_indicators")
-    con.execute(
-        """
-        CREATE TABLE event_indicators(
-            user_id VARCHAR,
-            event_id VARCHAR,
-            event_name VARCHAR,
-            event_type VARCHAR,
-            start_date DATE,
-            end_time TIMESTAMP,
-            duration_days INTEGER,
-            indicator_name VARCHAR,
-            indicator_key VARCHAR,
-            expected_change VARCHAR,
-            impact_level VARCHAR,
-            time_to_effect INTEGER,
-            fade_out_days INTEGER
-        )
-        """
-    )
 
 
 def _hydrate_event_medications(con: Any, ctx: ToolContext) -> None:
-    # 禁止使用 events.json — 仅建空表保持 schema 兼容
     con.execute("DROP TABLE IF EXISTS event_medications")
-    con.execute(
-        """
-        CREATE TABLE event_medications(
-            user_id VARCHAR,
-            event_id VARCHAR,
-            event_name VARCHAR,
-            event_type VARCHAR,
-            start_date DATE,
-            medication_name VARCHAR,
-            dose VARCHAR,
-            frequency VARCHAR,
-            timing VARCHAR
-        )
-        """
-    )
 
 
 def _ensure_hydrated_duckdb(ctx: ToolContext) -> Path:
@@ -1761,9 +1750,23 @@ def query_duckdb(sql: str, runtime: ToolRuntime[ToolContext]) -> str:
     if not sql_clean:
         return "错误: SQL 不能为空"
 
+    # Prefix check 前 strip 掉开头的 "-- " 注释行（合法 SQL 注释，不应触发拒绝）
+    prefix_check = sql_clean
+    while True:
+        head = prefix_check.lstrip()
+        if not head.startswith("--"):
+            prefix_check = head
+            break
+        nl = head.find("\n")
+        if nl < 0:
+            prefix_check = ""
+            break
+        prefix_check = head[nl + 1 :]
+
     sql_up = sql_clean.upper()
+    prefix_up = prefix_check.upper()
     _ALLOWED_PREFIXES = ("SELECT", "WITH", "DESCRIBE", "PRAGMA TABLE_INFO", "PRAGMA SHOW_TABLES")
-    if not any(sql_up.startswith(p) for p in _ALLOWED_PREFIXES):
+    if not any(prefix_up.startswith(p) for p in _ALLOWED_PREFIXES):
         return "错误: 仅允许 SELECT/CTE/DESCRIBE 只读查询"
 
     for kw in _FORBIDDEN_SQL:

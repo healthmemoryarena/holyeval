@@ -50,14 +50,26 @@ class ManualTestAgent(AbstractTestAgent, name="manual"):
 
         if idx < len(self.user_info.strict_inputs):
             text = self.user_info.strict_inputs[idx]
+            # Attachments are addressed by turn number (1-based). Pick the
+            # ones that belong to the current turn; target agent decides
+            # how to actually ship them to the system-under-test.
+            turn_attachments = [
+                a for a in getattr(self.user_info, "attachments", []) or []
+                if a.turn == self.current_turn
+            ]
             logger.info(
-                "[ManualTestAgent] Turn %d — strict_input[%d]: %s",
+                "[ManualTestAgent] Turn %d — strict_input[%d]: %s%s",
                 self.current_turn,
                 idx,
                 text[:80] + "..." if len(text) > 80 else text,
+                f" (+{len(turn_attachments)} attachment(s))" if turn_attachments else "",
             )
             return TestAgentReaction(
-                action=TestAgentAction(type="semantic", semantic_content=text),
+                action=TestAgentAction(
+                    type="semantic",
+                    semantic_content=text,
+                    attachments=turn_attachments,
+                ),
                 reason="scripted input",
                 is_finished=False,
             )

@@ -15,9 +15,43 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+import sentry_sdk
+
 from evaluator.utils.benchmark_reader import _DATA_DIR, _read_metadata
 
 logger = logging.getLogger(__name__)
+
+# Hang 时长上限：超过则 kill 子进程并标记 error。可通过 env 覆盖。
+PREPARE_TIMEOUT_SECONDS = int(os.environ.get("PREPARE_TIMEOUT_SECONDS", "600"))
+
+
+def _report_to_sentry(
+    entry: "PrepareEntry",
+    *,
+    kind: str,
+    detail: str,
+    exc: BaseException | None = None,
+) -> None:
+    """把 prepare 失败/超时主动上报到 Sentry。
+
+    若 sentry_sdk 未初始化（缺 DSN），capture_* 调用会被 SDK 静默丢弃，无副作用。
+    """
+    try:
+        with sentry_sdk.push_scope() as scope:
+            scope.set_tag("prepare.benchmark", entry.benchmark)
+            scope.set_tag("prepare.kind", kind)
+            scope.set_extra("prepare.module_path", entry.module_path)
+            scope.set_extra("prepare.started_at", entry.started_at.isoformat())
+            scope.set_extra("prepare.detail", detail[-2000:])
+            if exc is not None:
+                sentry_sdk.capture_exception(exc)
+            else:
+                sentry_sdk.capture_message(
+                    f"prepare {kind}: {entry.benchmark} - {detail[:200]}",
+                    level="error",
+                )
+    except Exception:
+        logger.exception("Sentry capture failed (ignored)")
 
 
 @dataclass
@@ -86,7 +120,38 @@ class PrepareManager:
                 cwd=str(Path(__file__).resolve().parents[3]),  # project root
                 env=env,
             )
-            stdout, stderr = await proc.communicate()
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=PREPARE_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                # 子进程 hang 超时：kill + 收尾，状态置 error，并上报 Sentry
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+                try:
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+                except asyncio.TimeoutError:
+                    stdout, stderr = b"", b""
+
+                entry.finished_at = datetime.now()
+                elapsed = (entry.finished_at - entry.started_at).total_seconds()
+                entry.status = "error"
+                err_tail = (stderr.decode("utf-8", errors="replace")[-1000:] if stderr else "").strip()
+                out_tail = (stdout.decode("utf-8", errors="replace")[-1000:] if stdout else "").strip()
+                entry.error = (
+                    f"timeout after {PREPARE_TIMEOUT_SECONDS}s\n"
+                    f"--- stderr tail ---\n{err_tail or '(empty)'}\n"
+                    f"--- stdout tail ---\n{out_tail or '(empty)'}"
+                )
+                logger.error(
+                    "Prepare script timeout: %s (%.1fs, limit=%ds) - stderr_tail=%r",
+                    entry.benchmark, elapsed, PREPARE_TIMEOUT_SECONDS, err_tail[-300:],
+                )
+                _report_to_sentry(entry, kind="timeout", detail=entry.error)
+                return
 
             entry.finished_at = datetime.now()
             elapsed = (entry.finished_at - entry.started_at).total_seconds()
@@ -101,13 +166,22 @@ class PrepareManager:
                 entry.status = "error"
                 err_msg = stderr.decode(errors="replace")[-1000:] if stderr else f"exit code {proc.returncode}"
                 entry.error = err_msg
-                logger.error("Prepare script failed: %s (exit=%d) - %s", entry.benchmark, proc.returncode, err_msg)
+                logger.error(
+                    "Prepare script failed: %s (exit=%d, %.1fs) - %s",
+                    entry.benchmark, proc.returncode, elapsed, err_msg,
+                )
+                _report_to_sentry(
+                    entry,
+                    kind="non-zero-exit",
+                    detail=f"exit={proc.returncode}\n{err_msg}",
+                )
 
         except Exception as e:
             entry.finished_at = datetime.now()
             entry.status = "error"
             entry.error = str(e)
             logger.error("Prepare script exception: %s - %s", entry.benchmark, e, exc_info=True)
+            _report_to_sentry(entry, kind="exception", detail=str(e), exc=e)
 
     # ==================== Shutdown ====================
 

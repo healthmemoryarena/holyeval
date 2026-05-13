@@ -356,6 +356,22 @@ async def _resume_benchmark(
 # ============================================================
 
 
+def _print_grouped_stats(stats_by_tag: dict, prefix: str, title: str) -> None:
+    """打印特定 tag 前缀（如 hallu_type:）的分组统计，按 avg_score 降序。"""
+    rows = [
+        (tag[len(prefix):], s)
+        for tag, s in stats_by_tag.items()
+        if tag.startswith(prefix)
+    ]
+    if not rows:
+        return
+    rows.sort(key=lambda x: -x[1]["avg_score"])
+    print(f"\n按{title}统计:")
+    print(f"  {'类别':<14} {'条数':>6}  {'通过率':>8}  {'平均分':>8}")
+    for name, s in rows:
+        print(f"  {name:<14} {s['total']:>6}  {s['pass_rate']:>7.1%}  {s['avg_score']:>8.3f}")
+
+
 def _print_summary(report: BenchReport, report_path: Path) -> None:
     """打印跑分摘要到 stdout"""
     sep = "=" * 60
@@ -372,9 +388,13 @@ def _print_summary(report: BenchReport, report_path: Path) -> None:
     print(f"  平均得分:  {report.avg_score:.2f}")
     print(f"  总耗时:    {report.total_duration_seconds:.1f}s")
 
-    # 按 tag 统计
+    # 按主类别分组（hallu_type:* 或 dim:* 等命名空间的 tag 优先展示为独立分组）
+    _print_grouped_stats(report.stats_by_tag, prefix="hallu_type:", title="幻觉类型")
+    _print_grouped_stats(report.stats_by_tag, prefix="dim:", title="评测维度")
+
+    # 按 tag 统计（完整）
     if report.stats_by_tag:
-        print("\n按标签统计:")
+        print("\n按标签统计（全部）:")
         for tag, stats in sorted(report.stats_by_tag.items()):
             print(f"  [{tag}] {stats['total']} 条, 通过率 {stats['pass_rate']:.1%}, 平均分 {stats['avg_score']:.2f}")
 

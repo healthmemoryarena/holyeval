@@ -103,6 +103,27 @@ ChatMessage = Annotated[BaseMessage, BeforeValidator(_to_base_message)]
 # ============================================================
 
 
+class AttachmentRef(BaseModel):
+    """单个附件引用 — 公开可访问的 URL + metadata
+
+    用例 JSONL 里直接写链接和基本信息，target agent 原样塞进
+    backend `file_list` 字段即可。不涉及签名、本地文件、manifest —
+    所以任何数据集、任何 target 都能复用。
+
+    ``turn`` 用于指定附件挂在第几轮用户消息上（从 1 开始）。默认第 1
+    轮，也就是首条用户输入。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_url: str = Field(description="公开可匿名访问的 URL")
+    file_name: str = Field(description="文件原始名，展示用")
+    file_type: str = Field(description="MIME，如 image/png / application/pdf")
+    file_size: int = Field(description="字节数")
+    file_key: Optional[str] = Field(default=None, description="可选的存储 key；纯记账用")
+    turn: int = Field(default=1, ge=1, description="挂载到第几轮用户消息（1-based）")
+
+
 class PersonaConfig(BaseModel):
     """虚拟用户行为特征配置 — 五维三档对抗画像
 
@@ -197,6 +218,14 @@ class AutoUserInfo(BaseModel):
             "auto TestAgent 会据此在 system prompt 中注入对应的行为描述。"
         ),
     )
+    attachments: List[AttachmentRef] = Field(
+        default_factory=list,
+        description=(
+            "附件列表 — 每项含 file_url / file_name / file_type / file_size 和"
+            " turn（挂到第几轮消息上，1-based，默认 1）。target agent 决定如何消费（通常"
+            "透传到被测后端的 file_list 字段）。"
+        ),
+    )
 
 
 class ManualUserInfo(BaseModel):
@@ -224,6 +253,14 @@ class ManualUserInfo(BaseModel):
             "按序发送的预设对话内容（必填，至少一条）。"
             "按顺序逐轮发送，全部消费完毕后自动结束对话。"
             "适用场景：数据提取验证、预设问答、回归测试等单轮/固定轮次测试。"
+        ),
+    )
+    attachments: List[AttachmentRef] = Field(
+        default_factory=list,
+        description=(
+            "附件列表 — 每项含 file_url / file_name / file_type / file_size 和"
+            " turn（挂到第几轮消息上，1-based，默认 1）。target agent 决定如何消费（通常"
+            "透传到被测后端的 file_list 字段）。"
         ),
     )
 
@@ -582,6 +619,13 @@ class TestAgentAction(BaseModel):
     semantic_content: Optional[str] = Field(None, description="语义化内容")
     message_content: Optional[Dict[str, Any]] = Field(None, description="大模型消息内容")
     custom_content: Optional[Dict[str, Any]] = Field(None, description="自定义内容（仅当 type 为 custom 时有效）")
+    attachments: List[AttachmentRef] = Field(
+        default_factory=list,
+        description=(
+            "随本次动作一同发送的附件列表。test agent 在消费"
+            " user_info.attachments 时，按 turn 命中的那部分注入进来，target agent 原样透传。"
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_type_content_consistency(self) -> "TestAgentAction":
