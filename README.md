@@ -1,6 +1,6 @@
 <h1 align="center">
   <br>
-  HolyEval
+  mirobody-eval
   <br>
 </h1>
 
@@ -9,17 +9,18 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/healthmemoryarena/holyeval/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://github.com/thetahealth/mirobody-eval/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-3776AB.svg?logo=python&logoColor=white" alt="Python 3.11+"></a>
   <a href="https://docs.anthropic.com/en/docs/claude-code"><img src="https://img.shields.io/badge/Claude_Code-native-cc785c.svg?logo=anthropic&logoColor=white" alt="Claude Code Native"></a>
   <a href="https://arxiv.org/abs/2604.02834"><img src="https://img.shields.io/badge/arXiv-2604.02834-b31b1b.svg" alt="arXiv Paper"></a>
   <a href="https://huggingface.co/datasets/healthmemoryarena/ESL-Bench"><img src="https://img.shields.io/badge/%F0%9F%A4%97_HuggingFace-ESL--Bench-FFD21E.svg" alt="HuggingFace Dataset"></a>
   <a href="http://healthmemoryarena.ai"><img src="https://img.shields.io/badge/%F0%9F%8C%90_Live-Health_Memory_Arena-black.svg" alt="Live Demo"></a>
-  <a href="https://github.com/healthmemoryarena/holyeval/stargazers"><img src="https://img.shields.io/github/stars/healthmemoryarena/holyeval?style=social" alt="GitHub Stars"></a>
+  <a href="https://github.com/thetahealth/mirobody-eval/stargazers"><img src="https://img.shields.io/github/stars/thetahealth/mirobody-eval?style=social" alt="GitHub Stars"></a>
 </p>
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#evaluate-your-own-mirobody-deployment">Evaluate mirobody</a> &middot;
   <a href="#ai-native-development-with-claude-code">Claude Code</a> &middot;
   <a href="#web-ui">Web UI</a> &middot;
   <a href="http://healthmemoryarena.ai">Live Demo</a> &middot;
@@ -43,7 +44,7 @@
 
 ---
 
-HolyEval is an AI-native, open-source evaluation framework for large language models. Drop in a benchmark dataset, run one command, get a scored report. Extend it with custom evaluators, target systems, and virtual users via a pluggable agent architecture.
+mirobody-eval is the evaluation half of [mirobody](https://github.com/thetahealth/mirobody) — the open-source health data engine. It exists so mirobody's claims come with numbers attached: seed a synthetic user into your own deployment, run a benchmark against it, get a scored report. The framework underneath is general, so the same one command reproduces any published benchmark against any target you plug in. Drop in a benchmark dataset, run one command, get a scored report. Extend it with custom evaluators, target systems, and virtual users via a pluggable agent architecture.
 
 Built from the ground up as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) native project — every workflow, from initial setup to integrating a new benchmark from a research paper, is an interactive slash command. You describe what you want in natural language, and Claude Code handles the rest. **You don't need to write a single line of code to use or extend this framework.**
 
@@ -73,7 +74,7 @@ uv run python -m benchmark.basic_runner eslbench sample50-20260331 --target-mode
 # Ready for a full run? Remove --limit to run the entire dataset
 ```
 
-## Why HolyEval?
+## Why mirobody-eval?
 
 | | |
 |---|---|
@@ -92,7 +93,7 @@ With [Claude Code](https://docs.anthropic.com/en/docs/claude-code): just run `/q
 Or manually:
 
 ```bash
-git clone https://github.com/healthmemoryarena/holyeval.git && cd holyeval
+git clone https://github.com/thetahealth/mirobody-eval.git && cd mirobody-eval
 uv sync
 cp .env.example .env                    # add your OPENAI_API_KEY or GOOGLE_API_KEY
 
@@ -107,9 +108,55 @@ uv run python -m web                    # http://localhost:8000
 >
 > **ESLBench data prep:** ESLBench requires downloading data from HuggingFace first — run `uv run python -m generator.eslbench.prepare_data` (automatic via Web UI). Other benchmarks ship with data included.
 
+## Evaluate your own mirobody deployment
+
+This is what mirobody-eval is for. A fresh [mirobody](https://github.com/thetahealth/mirobody)
+install has an empty database, so there is nothing to ask it about and no way to tell whether a
+change you made helped. Three commands fix both:
+
+```bash
+# 1. Pull one synthetic user's five-year trajectory from HuggingFace (~20 MB)
+uv run python -m generator.eslbench.prepare_data
+
+# 2. Load it into your deployment's Postgres, and make the indicators searchable
+uv run python -m generator.eslbench.seed_mirobody --users user5086@demo
+
+# 3. Score your deployment on ESL-Bench
+uv run python -m benchmark.basic_runner eslbench sample200-20260430 --target-type mirobody --limit 20
+```
+
+You now have a number for the five ESL-Bench reasoning dimensions — Lookup, Trend, Comparison,
+Anomaly, Explanation. Change the model, switch agent type, edit a prompt, add a tool, re-run, and
+see which dimensions moved. Point `--target-type llm_api` at the same questions for a
+retrieval-only baseline to compare against.
+
+> **Prerequisites for step 2:** `pip install mirobody` with config pointing at the deployment you
+> want to seed, plus a working embedding-provider key. Seeding verifies afterwards that every
+> indicator is actually reachable by the agent and **fails loudly if not** — the alternative is a
+> database that looks full while the agent answers "I don't have your health data", with nothing in
+> the logs to explain why.
+>
+> **Prerequisites for step 3:** the deployment's HTTP server running (`MIROBODY_BASE_URL`, default
+> `http://localhost:18080`).
+
+### The file-upload demo
+
+`labreport` renders one of the synthetic user's lab panels as a PDF, so mirobody's ingest path has
+something real to chew on. Hold that panel back when seeding and the upload contributes data the
+database genuinely does not have yet — which is what turns "what is my lipid trend?" into a real
+question instead of a single point:
+
+```bash
+uv run python -m generator.eslbench.seed_mirobody --users user5086@demo --hold-out-exams 1
+uv run python -m generator.eslbench.labreport     --users user5086@demo -o samples/lab_report.pdf
+```
+
+`user5086@demo` is a generated 58-year-old with type 2 diabetes whose lipids improve and then drift
+back across four panels. Every value is synthetic; the PDF says so on its front page.
+
 ## AI-Native Development with Claude Code
 
-HolyEval is designed to be operated entirely through [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Every common task has a dedicated slash command. You describe your intent in natural language; Claude Code reads the code, generates files, runs tests, and validates the result.
+mirobody-eval is designed to be operated entirely through [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Every common task has a dedicated slash command. You describe your intent in natural language; Claude Code reads the code, generates files, runs tests, and validates the result.
 
 **You don't need to memorize CLI flags, read source code, or write boilerplate.** Just type the slash command and follow the conversation.
 
@@ -185,7 +232,7 @@ Launch with `uv run python -m web`, then visit http://localhost:8000.
 
 ## Health Memory Arena — Live Evaluation Platform
 
-[Health Memory Arena](http://healthmemoryarena.ai) (HMA) is the public evaluation platform powered by HolyEval. It hosts the ESL-Bench leaderboard where health AI agents compete on structured longitudinal reasoning tasks.
+[Health Memory Arena](http://healthmemoryarena.ai) (HMA) is the public evaluation platform powered by mirobody-eval. It hosts the ESL-Bench leaderboard where health AI agents compete on structured longitudinal reasoning tasks.
 
 <table>
 <tr>
@@ -217,7 +264,7 @@ TestCase (JSON) → Orchestrator
 All execution paths (CLI, Web UI, programmatic) funnel through a single entry point: `do_single_test()`.
 
 <p align="center">
-  <img src="docs/architecture.png" alt="HolyEval Architecture" width="80%">
+  <img src="docs/architecture.png" alt="mirobody-eval Architecture" width="80%">
 </p>
 
 ### Plugin System
@@ -241,7 +288,7 @@ class MyEvalAgent(AbstractEvalAgent, name="my_eval"):
 ### Project Structure
 
 ```
-holyeval/
+mirobody-eval/
 ├── evaluator/          # Core engine: schema, orchestrator, plugin interfaces
 ├── benchmark/          # Runner + datasets (JSONL) + reports
 │   └── data/eslbench/  # ESLBench: data + tools (retrieve.py for JSON/DuckDB)
@@ -326,7 +373,7 @@ Two ways:
 
 See [benchmark/data/history_demo/](benchmark/data/history_demo/) for a minimal example.
 
-## Extending HolyEval
+## Extending mirobody-eval
 
 ### Add an evaluator
 
@@ -401,7 +448,7 @@ Environment variables (in `.env`):
 
 ### Planned
 - [ ] **Eval-driven optimization loop** — run benchmark → auto-analyze failure patterns → generate targeted prompt/system improvements → re-run to verify. Close the loop between evaluation and iteration
-- [ ] **CI/CD integration** — `pip install holyeval` + `holyeval.run("healthbench", model="gpt-5.4-mini")` as a one-liner in your CI pipeline. Regression detection across runs, alerting on score drops before deployment
+- [ ] **CI/CD integration** — `pip install mirobody-eval` + `mirobody_eval.run("healthbench", model="gpt-5.4-mini")` as a one-liner in your CI pipeline. Regression detection across runs, alerting on score drops before deployment
 - [ ] **Industry agent & app deep evaluation** — comprehensive evaluation reports for mainstream AI agents and health apps (e.g. ChatGPT, Gemini, health assistants). Standardized scoring across safety, accuracy, and user experience, published as reproducible community benchmarks
 
 ## Development
@@ -430,7 +477,7 @@ Please open an issue first to discuss significant changes.
 
 ## Citation
 
-If you use ESL-Bench or HolyEval in your research, please cite:
+If you use ESL-Bench or mirobody-eval in your research, please cite:
 
 ```bibtex
 @article{li2026eslbench,
