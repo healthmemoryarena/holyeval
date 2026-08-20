@@ -1,7 +1,7 @@
 [project]
-name = "holyeval"
+name = "mirobody-eval"
 version = "0.1.0"
-description = "Open-source LLM evaluation framework — reproduce any benchmark with one command"
+description = "Evaluation for mirobody — seed a synthetic user, score your deployment, reproduce any published benchmark"
 requires-python = ">=3.11"
 readme = "README.md"
 dependencies = [
