@@ -144,6 +144,30 @@ def test_documents_every_environment_variable_the_code_reads(name):
     assert not missing, f"{name}'s configuration table does not document: {missing}"
 
 
+def test_env_example_covers_what_the_readme_documents():
+    """`.env.example` is the first file a reader copies.
+
+    A variable documented in the README but absent from the template is one the
+    reader has to invent from prose — and the ones most worth having in front of
+    you are exactly the ones you would not guess, like the path to the
+    deployment you are pointing at.
+    """
+    documented = set()
+    rows = [ln for ln in _text("README.md").splitlines() if ln.startswith("|")]
+    for row in rows:
+        documented |= set(re.findall(r"`([A-Z][A-Z0-9_]{3,})`", row))
+
+    # An ASSIGNMENT line, commented or not — not a mention in the surrounding
+    # prose. Every variable this file explains is also "present" in it, so a
+    # substring check passes after the line itself is deleted. (That mistake was
+    # made three times while writing these checks, in three different ways.)
+    template = (_ROOT / ".env.example").read_text(encoding="utf-8")
+    assigned = set(re.findall(r"(?m)^\s*#?\s*([A-Z][A-Z0-9_]{3,})=", template))
+    missing = sorted(documented - assigned)
+
+    assert not missing, f".env.example has no line for: {missing}"
+
+
 # ---------------------------------------------------------------------------
 # 3. A reader can get from one language to the other
 # ---------------------------------------------------------------------------
