@@ -360,7 +360,7 @@ class TargetSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    type: str = Field(description="目标类型（如 llm_api / theta_api）")
+    type: str = Field(description="目标类型（如 llm_api / hermes）")
     fields: Dict[str, TargetFieldSpec] = Field(
         default_factory=dict,
         description="各字段的配置规格（字段名 → TargetFieldSpec）",
@@ -417,7 +417,7 @@ class TestCase(BaseModel):
                         "finish_condition": "AI 给出了可能的病因分析并建议了具体的缓解措施或就医建议",
                     },
                     "target": {
-                        "type": "theta_api",
+                        "type": "llm_api",
                         "email": "demo1@symptom_entry_evaluation.com",
                     },
                     "eval": {
@@ -557,7 +557,7 @@ class TestResult(BaseModel):
     id: str = Field(description="测试用例 ID")
     title: str = Field("", description="用例标题（来自 TestCase.title）")
     user_type: str = Field("", description="TestAgent 类型（如 auto / manual）")
-    target_type: str = Field("", description="TargetAgent 类型（如 llm_api / theta_api）")
+    target_type: str = Field("", description="TargetAgent 类型（如 llm_api / hermes）")
     eval_type: str = Field("", description="EvalAgent 类型（如 semantic / healthbench）")
     eval: EvalResult = Field(description="评估结果")
     cost: TestCost = Field(default_factory=TestCost, description="测试成本")

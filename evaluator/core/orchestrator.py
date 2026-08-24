@@ -14,14 +14,14 @@
 插件注册（基于 __init_subclass__）:
   class AutoTestAgent(AbstractTestAgent, name="auto"):       # LLM 驱动
   class ManualTestAgent(AbstractTestAgent, name="manual"):   # 脚本驱动
-  class ThetaApiTargetAgent(AbstractTargetAgent, name="theta_api"):  # Theta HTTP API
   class LlmApiTargetAgent(AbstractTargetAgent, name="llm_api"):    # 基于 do_execute
+  class HermesTargetAgent(AbstractTargetAgent, name="hermes"):     # 外部 HTTP 服务
   class SemanticEvalAgent(AbstractEvalAgent, name="semantic"):
 
 插件导入（触发注册）:
   import evaluator.plugin.test_agent    # AutoTestAgent / ManualTestAgent
-  import evaluator.plugin.target_agent  # ThetaApiTargetAgent / LlmApiTargetAgent
-  import evaluator.plugin.eval_agent    # SemanticEvalAgent / IndicatorEvalAgent / KeywordEvalAgent
+  import evaluator.plugin.target_agent  # LlmApiTargetAgent / HermesTargetAgent / ...
+  import evaluator.plugin.eval_agent    # SemanticEvalAgent / RubricEvalAgent / ...
 
 设计原则:
 - core 不依赖任何具体实现，仅依赖抽象接口
@@ -395,7 +395,7 @@ async def do_single_test(
         if hasattr(target_agent, "cost") and hasattr(target_agent, "model"):
             if target_agent.cost["total_tokens"] > 0:
                 dialogue_cost.target = {target_agent.model: target_agent.cost}
-        # Attach raw cost detail if target agent provides it (e.g. theta_smart_api with breakdown)
+        # Attach raw cost detail if target agent provides it (e.g. target agents that report a per-call cost breakdown)
         if hasattr(target_agent, "cost_detail") and target_agent.cost_detail:
             dialogue_cost.target_detail = target_agent.cost_detail
 
@@ -786,7 +786,7 @@ async def do_batch_eval(
 
     Args:
         items:           [(TestCase, memory_list)] 或 [(TestCase, memory_list, session_info)] 列表
-                         session_info 用于让 judge 区分 theta-target vs 基模（is_theta_target 标志）;
+                         session_info 用于让 judge 区分「能读到用户数据的 target」与基模（has_user_data 标志）;
                          省略时一律按基模评测。
         max_concurrency: 最大并发数，0 表示不限制
         on_progress:     每条评测完成时的回调（用于实时进度跟踪）

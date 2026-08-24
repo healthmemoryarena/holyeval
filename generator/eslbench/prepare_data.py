@@ -1,13 +1,13 @@
 """
 ESLBench 数据准备脚本（canonical implementation）
 
-ThetaGen 和 ESLBench 共享此模块的核心函数。核心函数均接受 benchmark_dir / data_dir / label 参数，
-两个 benchmark 通过传入各自的路径复用同一套逻辑。
+核心函数均接受 benchmark_dir / data_dir / label 参数，不同 benchmark 通过传入
+各自的路径复用同一套逻辑。
 
 Web UI 启动时通过 PrepareManager 自动执行，完成以下步骤:
 1. 从 HuggingFace ($ESLBENCH_HF_REPO, 默认 healthmemoryarena/ESL-Bench) 下载用户数据（基于 manifest.json 增量更新）
 2. 为每个用户创建独立 DuckDB（benchmark/data/{benchmark}/.data/{user_dir}/user.duckdb）
-3. [可选] 生成每用户 JSONL + 汇总 full.jsonl（ThetaGen 使用，ESLBench 已有预制 JSONL）
+3. [可选] 生成每用户 JSONL + 汇总 full.jsonl（ESLBench 已有预制 JSONL，此步可跳过）
 
 目录名即邮箱（_AT_ 替换 @），如 user110_AT_demo → user110@demo。
 自动发现用户目录，无需硬编码用户列表。
@@ -25,12 +25,15 @@ import json
 import os
 from pathlib import Path
 
-HF_REPO = os.getenv("ESLBENCH_HF_REPO", os.getenv("THETAGEN_HF_REPO", "healthmemoryarena/ESL-Bench"))
+from evaluator.utils import paths
+
+HF_REPO = os.getenv("ESLBENCH_HF_REPO", "healthmemoryarena/ESL-Bench")
 
 # ==================== ESLBench 默认路径 ====================
 
 BENCHMARK_DIR = Path(__file__).resolve().parents[2] / "benchmark" / "data" / "eslbench"
-DATA_DIR = BENCHMARK_DIR / ".data"
+# DATA_DIR: prod 下读 HOLYEVAL_USER_DATA_DIR/eslbench；dev 下回退 BENCHMARK_DIR/.data
+DATA_DIR = paths.user_data_dir("eslbench")
 
 # ==================== 共享工具函数 ====================
 
@@ -364,7 +367,7 @@ def build_all_duckdb(data_dir: Path, *, label: str = "eslbench", force: bool = F
     print(f"[{label}] DuckDB 创建完成: {created} 个新建, {skipped} 个已存在跳过")
 
 
-# ==================== Step 3: 生成 JSONL 评测集（可选，ThetaGen 使用） ====================
+# ==================== Step 3: 生成 JSONL 评测集（可选） ====================
 
 
 def build_datasets(benchmark_dir: Path, data_dir: Path, *, label: str = "eslbench", force: bool = False) -> None:

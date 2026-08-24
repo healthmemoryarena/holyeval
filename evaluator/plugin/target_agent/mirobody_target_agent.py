@@ -3,9 +3,9 @@
 注册名称: "mirobody"
 
 补的是 mirobody README 里那句话的另一半。它写着 "we don't say 'trust us', we ship
-the eval"，但本仓库原有的 7 个 target agent 里没有一个打 mirobody —— 打 Theta 线上的
-`theta_api` 在开源过滤时被剔掉了。也就是说这套 eval 从没考过 mirobody 自己：跑出来的
-分数证明的是 ESL-Bench 这个基准好，不是 mirobody 好。
+the eval"，但本仓库原有的 target agent 里没有一个打 mirobody —— 有基模、有几个 RAG
+系统，唯独没有它自己。也就是说这套 eval 从没考过 mirobody：跑出来的分数证明的是
+ESL-Bench 这个基准好，不是 mirobody 好。
 
 实现流程:
 1. 拿 user_email 去 `health_app_user` 换数字 id

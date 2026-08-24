@@ -83,6 +83,7 @@ async def do_execute(
     timeout: int | None = None,
     tool_context: Any | None = None,
     tool_context_schema: type | None = None,
+    temperature: float | None = None,
 ) -> ExecuteResult:
     """
     调用大模型
@@ -96,7 +97,7 @@ async def do_execute(
     - 其他模型（如 anthropic/claude-*、meta-llama/*）→ 自动通过 OpenRouter 调用
 
     Args:
-        model: 模型名称，如 "gpt-5.2" / "gemini-3-pro" / "anthropic/claude-3.7-sonnet"
+        model: 模型名称，如 "gpt-5.2" / "gemini-3-pro-preview" / "anthropic/claude-3.7-sonnet"
         system_prompt: 系统提示词
         input: 用户输入（字符串或 BasicMessage）
         history_messages: 历史对话消息列表
@@ -136,7 +137,15 @@ async def do_execute(
 
     # ---- 1. 判断 provider，拼装模型参数 ----
 
-    if model.startswith("gpt"):
+    # 方括号前缀的模型名走「自带的 OpenAI 兼容网关」(vLLM / LiteLLM / 自建中转均可):
+    # base_url/key 取自 HOLYEVAL_GATEWAY_BASE_URL / HOLYEVAL_GATEWAY_API_KEY(见下 init_kwargs)。
+    # 用独立变量而不是复用 GEMINI_API_KEY —— 后者是真正的 Google key,复用会把它发给任意第三方。
+    use_gateway = False
+    if model.startswith("["):
+        provider = "openai"
+        use_openrouter = False
+        use_gateway = True
+    elif model.startswith("gpt"):
         # OpenAI 原生模型
         provider = "openai"
         use_openrouter = False
@@ -190,6 +199,10 @@ async def do_execute(
         **model_kwargs,
     }
 
+    # 可选:确定性采样(opt-in)。temperature=0 消除同题重跑的生成随机性,用于可复现评测。
+    if temperature is not None:
+        init_kwargs["temperature"] = temperature
+
     # OpenAI + reasoning_effort + tools → 必须使用 Responses API
     if provider == "openai" and not use_openrouter and thinking_level is not None and tools:
         init_kwargs["use_responses_api"] = True
@@ -200,6 +213,19 @@ async def do_execute(
 
         init_kwargs["base_url"] = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         init_kwargs["api_key"] = os.getenv("OPENROUTER_API_KEY")
+
+    # 自建 OpenAI 兼容网关(方括号前缀的模型名)
+    if use_gateway:
+        import os
+
+        base = os.getenv("HOLYEVAL_GATEWAY_BASE_URL")
+        if not base:
+            raise RuntimeError(
+                f"模型 {model!r} 以 '[' 开头，表示走自带的 OpenAI 兼容网关，"
+                "但环境变量 HOLYEVAL_GATEWAY_BASE_URL 未设置。"
+            )
+        init_kwargs["base_url"] = base
+        init_kwargs["api_key"] = os.getenv("HOLYEVAL_GATEWAY_API_KEY", "")
 
     llm = init_chat_model(**init_kwargs)
 
@@ -244,6 +270,12 @@ async def do_execute(
                 invoke_kwargs: dict[str, Any] = {}
                 if tool_context is not None:
                     invoke_kwargs["context"] = tool_context
+                # opt-in:调高 ReAct 递归上限(默认 25=langgraph 默认)。弱模型(flash)工具循环多,
+                # 25 步会在产出最终答案前被截断→末条 AIMessage 只剩 tool_calls、content 空。
+                import os as _os_rl
+                _rl = _os_rl.environ.get("AGENT_RECURSION_LIMIT")
+                if _rl:
+                    invoke_kwargs["recursion_limit"] = int(_rl)
                 result = await asyncio.wait_for(agent.ainvoke({"messages": messages}, **invoke_kwargs), timeout=timeout)
             cb_usage = cb.usage_metadata
             break

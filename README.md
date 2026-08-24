@@ -66,7 +66,7 @@ Built from the ground up as a [Claude Code](https://docs.anthropic.com/en/docs/c
 # Try it out — each command costs < $0.05 with --limit 3
 uv run python -m benchmark.basic_runner healthbench sample --target-model gpt-5.4-mini --limit 3
 uv run python -m benchmark.basic_runner medcalc sample --target-model gpt-5.4-mini --limit 3
-uv run python -m benchmark.basic_runner memoryarena sample --target-model gemini-3-pro --limit 3
+uv run python -m benchmark.basic_runner virtual_user round1 --target-type llm_api --target-model gpt-5.4-mini --limit 3
 
 # ESLBench requires data preparation first (see Quick Start below)
 uv run python -m benchmark.basic_runner eslbench sample50-20260331 --target-model gpt-5.4-mini --limit 3
@@ -169,7 +169,6 @@ mirobody-eval is designed to be operated entirely through [Claude Code](https://
 | **Integrate a new benchmark** | `/add-benchmark` | End-to-end: reads the paper/repo → analyzes data format → writes the converter → creates dataset → validates |
 | **Add a custom evaluator** | `/add-eval-agent` | Scaffolds config model + plugin implementation + registration. Immediately available in CLI & Web UI |
 | **Add a new target system** | `/add-target-agent` | Scaffolds connection handling, message processing, and cleanup for a new system under test |
-| **Run end-to-end tests** | `/run-e2e-test` | Verifies all components (TestAgent ↔ TargetAgent ↔ EvalAgent ↔ Orchestrator) work together |
 | **Audit architecture** | `/review-architecture` | Checks GitOps compliance, plugin isolation, shared-layer reuse. Reports violations with fix suggestions |
 
 ### Workflow Examples
@@ -218,14 +217,10 @@ Launch with `uv run python -m web`, then visit http://localhost:8000.
 <td width="50%">
 
 **Browse Benchmarks** — Overview of all benchmark datasets with case counts and statistics.
-
-<img src="docs/screenshots/holyeval_benchmarks.jpg" alt="Browse Benchmarks" width="100%">
 </td>
 <td width="50%">
 
 **Agent Registry** — Inspect all registered plugins with config schemas, features, and cost estimates.
-
-<img src="docs/screenshots/holyeval_agents.jpg" alt="Agent Registry" width="100%">
 </td>
 </tr>
 </table>
@@ -263,27 +258,23 @@ TestCase (JSON) → Orchestrator
 
 All execution paths (CLI, Web UI, programmatic) funnel through a single entry point: `do_single_test()`.
 
-<p align="center">
-  <img src="docs/architecture.png" alt="mirobody-eval Architecture" width="80%">
-</p>
-
 ### Plugin System
 
 Three agent types, each extensible via `__init_subclass__` auto-registration:
 
 ```python
 # Define a custom evaluator — that's it, it's registered
-class MyEvalAgent(AbstractEvalAgent, name="my_eval"):
+class MyEvalAgent(AbstractEvalAgent, name="my_eval", params_model=MyEvalInfo):
     async def run(self, memory_list, session_info):
         # your evaluation logic
-        return EvalResult(score=0.95, passed=True, feedback="...")
+        return EvalResult(result="pass", score=0.95, feedback="...")
 ```
 
 | Agent Type | Role | Built-in Plugins |
 |---|---|---|
 | **TestAgent** | Virtual user | `auto` (LLM-driven), `manual` (scripted) |
-| **TargetAgent** | System under test | `llm_api` (OpenAI / Gemini) |
-| **EvalAgent** | Evaluator | `semantic`, `healthbench`, `medcalc`, `hallucination`, `kg_qa`, `memoryarena` |
+| **TargetAgent** | System under test | `llm_api` (OpenAI / Gemini), `hermes`, `evermem`, `mem0_rag_api`, `naive_rag_api`, `hippo_rag_api`, `dyg_rag_api` |
+| **EvalAgent** | Evaluator | `semantic`, `rubric`, `healthbench`, `medcalc`, `kg_qa`, `record_retrieval`, `dialogue_quality`, `engagement` |
 
 ### Project Structure
 
@@ -304,9 +295,8 @@ mirobody-eval/
 | **HealthBench** | [OpenAI HealthBench](https://arxiv.org/abs/2505.07469) | `sample` (100), `full`, `hard`, `consensus` | Medical AI quality |
 | **MedCalc-Bench** | [MedCalc-Bench](https://arxiv.org/abs/2406.12036) | `sample`, `full` | Medical calculations |
 | **ESLBench** | [arXiv:2604.02834](https://arxiv.org/abs/2604.02834) | `sample50-20260331` (50), `sample500-20260331` (500), `full-20260331` (4500) | Longitudinal health reasoning |
-| **AgentClinic** | [AgentClinic](https://arxiv.org/abs/2405.07960) | `medqa` (107), `nejm` (15) | Clinical diagnosis |
-| **MedHall** | Custom | `theta` (30) | Hallucination detection |
-| **MemoryArena** | [MemoryArena](https://arxiv.org/abs/2501.13916) | `sample` (10), `full` (701) | Agent memory |
+| **ESLBench-Distractor** | — | `sample` (60), `distractor-behavioral-20260723` (120), `distractor-computable-20260723` (400) | Robustness to distractor context (shares ESLBench's prepared data) |
+| **Virtual User** | — | `round1` (15), `round2` (60) | Opening-line engagement |
 
 ### ESLBench — Event-Driven Synthetic Longitudinal Benchmark
 
@@ -331,10 +321,6 @@ ESLBench ([arXiv:2604.02834](https://arxiv.org/abs/2604.02834)) evaluates longit
 <details>
 <summary><strong>Benchmark results — 13 methods across 3 paradigms</strong></summary>
 <br>
-<p align="center">
-  <img src="docs/screenshots/eslbench_results.png" alt="ESL-Bench Main Results" width="80%">
-</p>
-
 Key findings: DB agents (48–58%) substantially outperform memory RAG (30–38%), with the gap concentrated on Comparison and Explanation queries where multi-hop reasoning and evidence attribution are required.
 </details>
 
@@ -371,7 +357,7 @@ Two ways:
 2. Create `benchmark/data/<name>/<dataset>.jsonl` in BenchItem format
 3. Run: `uv run python -m benchmark.basic_runner <name> <dataset> --target-model gpt-5.4-mini`
 
-See [benchmark/data/history_demo/](benchmark/data/history_demo/) for a minimal example.
+See [benchmark/data/medcalc/](benchmark/data/medcalc/) for a minimal `metadata.json` + `sample.jsonl` pair.
 
 ## Extending mirobody-eval
 
@@ -379,25 +365,50 @@ See [benchmark/data/history_demo/](benchmark/data/history_demo/) for a minimal e
 
 ```python
 # evaluator/plugin/eval_agent/my_eval_agent.py
-from evaluator.core.interfaces import AbstractEvalAgent, EvalResult
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field
 
-class MyEvalAgent(AbstractEvalAgent, name="my_eval"):
+from evaluator.core.interfaces.abstract_eval_agent import AbstractEvalAgent
+from evaluator.core.schema import EvalResult
+
+
+class MyEvalInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    evaluator: Literal["my_eval"] = "my_eval"
+    threshold: float = Field(0.8, ge=0.0, le=1.0)
+
+
+class MyEvalAgent(AbstractEvalAgent, name="my_eval", params_model=MyEvalInfo):
     async def run(self, memory_list, session_info):
         conversation = memory_list[-1].target_response
         score = your_scoring_logic(conversation)
-        return EvalResult(score=score, passed=score > 0.8, feedback="...")
+        return EvalResult(result="pass" if score > 0.8 else "fail", score=score, feedback="...")
 ```
+
+The filename must end with `_eval_agent.py` — that suffix is what the package's `pkgutil`
+auto-import picks up, which is what triggers registration. Nothing to add to `__init__.py`.
 
 ### Add a target system
 
 ```python
 # evaluator/plugin/target_agent/my_target_agent.py
-from evaluator.core.interfaces import AbstractTargetAgent
+from typing import Literal
+from pydantic import BaseModel, ConfigDict
 
-class MyTargetAgent(AbstractTargetAgent, name="my_target"):
-    async def execute(self, message):
-        response = await call_your_api(message)
-        return response
+from evaluator.core.interfaces.abstract_target_agent import AbstractTargetAgent
+from evaluator.core.schema import TargetAgentReaction
+
+
+class MyTargetInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["my_target"] = "my_target"
+    base_url: str
+
+
+class MyTargetAgent(AbstractTargetAgent, name="my_target", params_model=MyTargetInfo):
+    async def _generate_next_reaction(self, test_action):
+        response = await call_your_api(test_action)
+        return TargetAgentReaction(type="message", message_list=[{"content": response}])
 ```
 
 Use `/add-eval-agent` or `/add-target-agent` Claude Code skills for guided scaffolding.
@@ -411,19 +422,19 @@ uv run python -m generator.eslbench.prepare_data --force   # force rebuild
 
 # Run benchmark
 uv run python -m benchmark.basic_runner <benchmark> <dataset> [options]
-  --target-model MODEL    # LLM model to evaluate (e.g., gpt-5.4-mini, gemini-3-pro)
+  --target-model MODEL    # LLM model to evaluate (e.g., gpt-5.4-mini, gemini-3-pro-preview)
   --target-type TYPE      # Target agent type (for multi-target benchmarks)
   --limit N               # Max cases to run
   --ids id1,id2           # Run specific case IDs
-  -p N                    # Concurrency (default: 5)
+  -p N                    # Concurrency (default: 0 = unlimited)
   -v                      # Verbose output
   --resume                # Resume from last checkpoint
 
 # Convert external datasets
-uv run python -m generator.healthbench.converter input.jsonl output.jsonl --target-model gpt-5.4-mini
-uv run python -m generator.medcalc.converter
-uv run python -m generator.agentclinic.converter input.jsonl output.jsonl
-uv run python -m generator.memoryarena.converter
+uv run python -m generator.healthbench.converter input.jsonl output.jsonl
+uv run python -m generator.medcalc.converter input.csv output.jsonl
+uv run python -m generator.virtual_user case_gen --seed 42 \
+    --output benchmark/data/virtual_user/my_round.jsonl   # ⚠ 不传 --output 会覆盖随附的 round1.jsonl
 
 # Web UI
 uv run python -m web             # http://localhost:8000
@@ -439,7 +450,11 @@ Environment variables (in `.env`):
 | `GOOGLE_API_KEY` | At least one | Google Gemini API key |
 | `HF_TOKEN` | ESLBench | HuggingFace token for downloading benchmark data |
 | `OPENROUTER_API_KEY` | Optional | OpenRouter multi-provider access |
-| `HOLYEVAL_PORT` | Optional | Web UI port (default: 8000) |
+| `HOLYEVAL_GATEWAY_BASE_URL` | Optional | Your own OpenAI-compatible gateway (vLLM / LiteLLM / a proxy). Required only when a model name is written as `[label]model` |
+| `HOLYEVAL_GATEWAY_API_KEY` | Optional | API key for that gateway |
+| `HOLYEVAL_WEB_PORT` | Optional | Web UI port (default: 8000) |
+| `HOLYEVAL_HEALTH_PORT` | Optional | Health-check port (default: 8001) |
+| `HOLYEVAL_RELOAD` | Optional | `true` enables uvicorn auto-reload (default: false) |
 
 ## Roadmap
 
@@ -454,8 +469,10 @@ Environment variables (in `.env`):
 ## Development
 
 ```bash
-# Run tests
-uv run pytest evaluator/tests/
+# Sanity check — plugin registries load
+uv run python -c "import evaluator.plugin.eval_agent, evaluator.plugin.target_agent; \
+from evaluator.core.interfaces.abstract_eval_agent import AbstractEvalAgent; \
+print(sorted(AbstractEvalAgent.get_all()))"
 
 # Lint & format
 uv run ruff check .
@@ -490,4 +507,5 @@ If you use ESL-Bench or mirobody-eval in your research, please cite:
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Third-party components and their licenses are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

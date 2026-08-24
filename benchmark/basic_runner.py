@@ -17,7 +17,7 @@ target 合并优先级（高→低）:
     python -m benchmark.basic_runner healthbench sample --target-model gemini-3-pro-preview
 
     # 所有字段 editable=false 时 — 直接使用 metadata 默认值
-    python -m benchmark.basic_runner extraction simple
+    python -m benchmark.basic_runner medcalc sample
 
     # 断点续跑 — 恢复上次未完成的评测
     python -m benchmark.basic_runner healthbench sample --resume
@@ -428,7 +428,7 @@ def main() -> None:
             "  python -m benchmark.basic_runner healthbench sample --target-model gemini-3-pro-preview\n"
             "\n"
             "  # 所有字段锁定的 benchmark — 直接使用 metadata 默认值\n"
-            "  python -m benchmark.basic_runner extraction simple\n"
+            "  python -m benchmark.basic_runner medcalc sample\n"
             "\n"
             "  # 过滤和并发选项\n"
             "  python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --ids hb_abc,hb_def\n"
@@ -444,7 +444,7 @@ def main() -> None:
         "--target-type",
         type=str,
         default=None,
-        help="目标系统类型（如 llm_api、theta_api，多 target 时指定；单 target 时可省略）",
+        help="目标系统类型（如 llm_api、hermes，多 target 时指定；单 target 时可省略）",
     )
     parser.add_argument(
         "--target-model",

@@ -10,10 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from evaluator.core.schema import ReportEntry, TargetInfo
+from evaluator.utils import paths
 
 logger = logging.getLogger(__name__)
 
-_REPORT_DIR = Path(__file__).resolve().parents[2] / "benchmark" / "report"
+_REPORT_DIR = paths.report_dir()
 _DATA_DIR = Path(__file__).resolve().parents[2] / "benchmark" / "data"
 # 匹配: {prefix}_{YYYYMMDD_HHMMSS}.json — prefix 可能含 target label
 _REPORT_FILENAME_RE = re.compile(r"^(.+)_(\d{8}_\d{6}|\d{8})\.json$")
@@ -44,12 +45,15 @@ def _resolve_dataset_and_target(prefix: str, bench_name: str) -> tuple[str, str]
 def list_reports() -> list[ReportEntry]:
     """列出所有报告文件（按时间倒序，最新在前）"""
     if not _REPORT_DIR.is_dir():
+        logger.debug("[report] root=%s does not exist", _REPORT_DIR)
         return []
 
     result: list[ReportEntry] = []
+    bench_count = 0
     for bench_dir in sorted(_REPORT_DIR.iterdir()):
         if not bench_dir.is_dir() or bench_dir.name.startswith((".", "_")):
             continue
+        bench_count += 1
         for report_file in bench_dir.glob("*.json"):
             match = _REPORT_FILENAME_RE.match(report_file.name)
             if match:
@@ -67,6 +71,7 @@ def list_reports() -> list[ReportEntry]:
 
     # 全局按时间倒序（date 格式为 YYYYMMDD_HHMMSS 或 YYYYMMDD，字典序即时间序）
     result.sort(key=lambda r: r.date, reverse=True)
+    logger.debug("[report] root=%s found %d reports across %d benchmarks", _REPORT_DIR, len(result), bench_count)
     return result
 
 
@@ -100,12 +105,12 @@ def _make_target_label(target: "TargetInfo | None") -> str:
     格式: {type}[_{model}][_{agent}][_k{top_k}]
     - type:  始终包含（区分被测系统类型）
     - model: LLM 模型名（如有）
-    - agent: Agent 类型（如有，theta 系列）
+    - agent: Agent 类型（如有）
     - top_k: 检索数量（如有，RAG 系列）
 
     示例:
         llm_api + gpt-4.1           → llm_api_gpt-4.1
-        theta_api + expert          → theta_api_expert
+        mirobody + Deep             → mirobody_Deep
         hippo_rag_api + gemini-3-flash + k10 → hippo_rag_api_gemini-3-flash-preview_k10
         eval-only                   → eval-only
     """
@@ -150,5 +155,6 @@ def save_bench_report(report: "BenchReport", benchmark: str, dataset: str) -> Pa
             default=str,
         )
 
-    logger.info("报告已写入: %s", report_path)
+    size = report_path.stat().st_size
+    logger.info("[report] saved %s/%s (%d bytes) -> %s", benchmark, filename, size, report_path)
     return report_path
