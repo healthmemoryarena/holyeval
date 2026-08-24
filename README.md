@@ -130,7 +130,8 @@ Anomaly, Explanation. Change the model, switch agent type, edit a prompt, add a 
 see which dimensions moved. Point `--target-type llm_api` at the same questions for a
 retrieval-only baseline to compare against.
 
-> **Prerequisites for step 2:** `pip install mirobody` with config pointing at the deployment you
+> **Prerequisites for step 2:** `uv sync --extra mirobody --python 3.12` (the engine is 3.12+, while
+> this project itself runs on 3.11, so the extra is a no-op on 3.11) with config pointing at the deployment you
 > want to seed, plus a working embedding-provider key. Seeding verifies afterwards that every
 > indicator is actually reachable by the agent and **fails loudly if not** — the alternative is a
 > database that looks full while the agent answers "I don't have your health data", with nothing in

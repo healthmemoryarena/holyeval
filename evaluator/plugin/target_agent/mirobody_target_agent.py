@@ -20,11 +20,15 @@ ESL-Bench 这个基准好，不是 mirobody 好。
 `generator/eslbench/seed_mirobody.py`）。
 
 前置条件:
-- `pip install mirobody`，且配置指向要评测的那个部署
+- `uv sync --extra mirobody --python 3.12`（引擎要 3.12+，本项目自身跑 3.11，
+  所以这个 extra 在 3.11 上什么都不装），且配置指向要评测的那个部署
 - 该部署的 HTTP 服务在跑（默认 http://localhost:18080）
 - 用户已 seed 过: `python -m generator.eslbench.seed_mirobody --users user5086@demo`
 
 基础设施参数从环境变量读，不走 config:
+- `MIROBODY_CONFIG`    被测部署的 `config.{ENV}.yaml` 绝对路径。不给就按当前工作
+                       目录找，而 runner 的工作目录是本仓库、不是那个部署 —— 那样
+                       会静默退回内置默认值，错误信息指向一个不存在的库名
 - `MIROBODY_BASE_URL`  被测部署地址（默认 http://localhost:18080）
 - `MIROBODY_TIMEOUT`   单轮超时秒数（默认 300）
 - `MIROBODY_PROVIDER`  覆盖 agent 的 LLM provider。留空用部署自己的默认值 ——
@@ -169,6 +173,11 @@ class MirobodyTargetAgent(AbstractTargetAgent, name="mirobody", params_model=Mir
         没初始化就是 `ValueError: no configuration found`。所以这里按需初始化一次，
         并且只在真的没初始化时做 —— 已经初始化过的进程（例如跑在 mirobody 自己
         进程里）不该被重置。
+
+        `MIROBODY_CONFIG` 给出配置文件的显式路径。不给的话 `Config.init()` 按
+        **当前工作目录**找 `config.{ENV}.yaml`，而 runner 的工作目录是本仓库、
+        不是那个部署 —— 于是它悄悄退回内置默认值，把 PG 库名取成操作系统用户名，
+        报出来的是 `database "admin" does not exist`：一条完全指不到真实原因的错。
         """
         from mirobody.utils.config import global_config
 
@@ -177,11 +186,18 @@ class MirobodyTargetAgent(AbstractTargetAgent, name="mirobody", params_model=Mir
 
         from mirobody.utils import Config
 
-        await Config.init()
+        explicit = os.environ.get("MIROBODY_CONFIG", "").strip()
+        if explicit:
+            if not os.path.isfile(explicit):
+                raise RuntimeError(f"MIROBODY_CONFIG 指向的文件不存在: {explicit!r}")
+            await Config.init(explicit)
+        else:
+            await Config.init()
+
         if global_config() is None:  # pragma: no cover - 配置缺失时的兜底提示
             raise RuntimeError(
-                "mirobody 配置加载失败。确认 ENV 与 config.{ENV}.yaml 指向要评测的那个部署，"
-                "且当前工作目录能读到它。"
+                "mirobody 配置加载失败。用 MIROBODY_CONFIG 指定那个部署的 "
+                "config.{ENV}.yaml 绝对路径，或把工作目录切到它所在的目录。"
             )
 
     async def _resolve_user_id(self, email: str) -> str:
