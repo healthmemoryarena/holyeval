@@ -19,9 +19,12 @@ jobs:
       - run: uv run ruff check . || true
       - run: uv run ruff format --check . || true
 
-  # 不跑 pytest：单元测试目录不随开源版发布，对着它跑只会是一次空转。
-  # 这里跑的是**不需要 API key 也能失败**的完整性检查：插件注册得起来，
-  # 并且仓库里每个数据集声明的被测目标和评测器都真的存在。
+  # 跑三样都**不需要 API key 也能失败**的检查：随发布的单元测试、插件注册得起来、
+  # 仓库里每个数据集声明的被测目标和评测器都真的存在。
+  #
+  # `evaluator/tests/` 确实不随开源版发布，但和代码放在一起的 `test_*.py` 是发布的
+  # （纯逻辑，无 DB、无网络、无 LLM），所以这里对它们跑 pytest —— 原先整条 pytest
+  # 都被跳过，等于那些测试发布出去却从没被执行过。
   test:
     runs-on: ubuntu-latest
     steps:
@@ -30,7 +33,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: uv sync
+      - run: uv sync --group dev
+      - name: Unit tests that ship with the repo
+        run: uv run python -m pytest generator/ evaluator/ -q
       - name: Plugin registries load
         run: |
           uv run python - <<'PY'
