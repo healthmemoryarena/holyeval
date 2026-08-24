@@ -22,7 +22,7 @@ and tests」，但两个仓库里都没有代码把这批数据送进 mirobody �
 只会回答"我没有你的健康数据"，而且日志里看不出原因。所以 :func:`seed_user`
 灌完会回头校验覆盖率，有漏的直接报错，而不是留下一个哑掉的部署。
 
-需要目标部署的 mirobody 可 import（``pip install mirobody``）：复用它的
+需要目标部署的 mirobody 可 import（``uv sync --extra mirobody``）：复用它的
 ``execute_query`` / ``Config`` / ``IndicatorSyncTask``，而不是在这里重写一遍
 连接管理和 embedding 逻辑。
 
@@ -40,6 +40,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -66,14 +67,26 @@ _MAX_EMBED_SWEEPS = 20
 
 
 def _require_mirobody() -> None:
-    """mirobody 不可 import 时给出可操作的报错，而不是裸 ImportError。"""
+    """mirobody 不可 import 时给出可操作的报错，而不是裸 ImportError。
+
+    分两种情况说，因为它们的处置完全不同：Python 太旧的话 ``--extra mirobody``
+    会**装成功但什么都没装**（mirobody 是 3.12+，extra 上带着版本标记），此时
+    再叫人重跑一次安装只会让人原地转圈。
+    """
+    if sys.version_info < (3, 12):
+        raise RuntimeError(
+            f"seed 需要 mirobody，而它要求 Python >= 3.12（当前 "
+            f"{sys.version_info.major}.{sys.version_info.minor}）。本项目自身支持 3.11，"
+            "所以 `--extra mirobody` 在 3.11 上不装任何东西 —— 换用 3.12+ 的解释器：\n"
+            "    uv sync --extra mirobody --python 3.12"
+        )
     try:
         import mirobody  # noqa: F401
     except ImportError as e:  # pragma: no cover - 环境问题，不便单测
         raise RuntimeError(
             "seed 需要能 import mirobody（它复用 mirobody 的 execute_query / "
             "IndicatorSyncTask，不自己重写连接与 embedding 逻辑）。\n"
-            "    pip install mirobody\n"
+            "    uv sync --extra mirobody\n"
             "并确保配置指向你要灌的那个部署的 Postgres。"
         ) from e
 
@@ -233,14 +246,22 @@ async def insert_document(user_id: str, user_dir: str, file_name: str, body: str
 def _embedding_columns() -> tuple[str, str]:
     """当前 provider 对应的 ``(th_series_dim 列, fhir_indicators 列)``。
 
-    两张表列名规则不同 —— ``th_series_dim`` 用 provider 家族名（``embedding_qwen``），
-    ``fhir_indicators`` 用带版本的模型名（``embedding_qwen3``）—— 所以 FHIR 那侧走它
-    自己的 helper，不假设两边一致。跟 ``FhirAdapter._search_non_fhir`` 同一套拆分。
-    """
-    from mirobody.indicator.fhir.common import resolve_fhir_embedding_column
+    两张表列名规则不同，而且**都不能从 provider 名推**：``openrouter`` 这个 provider
+    在两张表里分别落到 ``embedding_qwen3_8b``（按模型命名，不按 provider）。所以两边
+    各走引擎自己的 helper。
 
-    provider, fhir_col = resolve_fhir_embedding_column()
-    return f"embedding_{provider}", fhir_col
+    这里原先是 ``f"embedding_{provider}"`` 手工拼的 —— gemini 和 qwen 恰好对得上，
+    于是错误一直没暴露；等 1.2.1 把 openrouter 设为默认 provider，它就会去查一个不
+    存在的列。
+    """
+    from mirobody.indicator.fhir.common import (
+        resolve_dim_embedding_column,
+        resolve_fhir_embedding_column,
+    )
+
+    _, dim_col = resolve_dim_embedding_column()
+    _, fhir_col = resolve_fhir_embedding_column()
+    return dim_col, fhir_col
 
 
 async def searchability(user_id: str) -> tuple[int, int, list[str]]:

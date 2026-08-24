@@ -11,6 +11,32 @@ dependencies = [
     "holyeval-web",
 ]
 
+[project.optional-dependencies]
+# Seeding a deployment and the `mirobody` target both reach into the engine they
+# are pointed at — `execute_query` for its Postgres, `IndicatorSyncTask` to make
+# the seeded indicators searchable, `JWT_KEY` to sign a token for a synthetic
+# user that has no login. Optional because every other target here speaks plain
+# HTTP and needs none of it.
+#
+# Both halves of this requirement were found the hard way, by installing it and
+# importing what the seeder actually calls:
+#
+#   `[server]` — `mirobody.task.base` does a plain `from redis.asyncio import
+#   Redis`, and redis (with psycopg and sqlalchemy, which `execute_query` needs)
+#   lives in that extra. Bare `mirobody` installs, and then `IndicatorSyncTask`
+#   dies on `No module named 'redis'`.
+#
+#   `>=1.2.1`  — `mirobody.task` and `mirobody.indicator.fhir` first appear in
+#   the 1.0.62 wheel (1.0.51 has neither), and the `server` extra itself first
+#   appears in 1.2.1 — 1.0.62 declares only cn/fin/test.
+#
+# The marker is required rather than cosmetic: mirobody is Python>=3.12 while
+# this project supports >=3.11, so an unmarked requirement makes the whole
+# workspace unresolvable on 3.11 — including for the targets that never touch
+# mirobody. On 3.11 the extra therefore installs nothing, and
+# `generator.eslbench.seed_mirobody` says so instead of failing on an import.
+mirobody = ["mirobody[server]>=1.2.1; python_version >= '3.12'"]
+
 [tool.uv]
 package = false
 
