@@ -453,6 +453,20 @@ def main() -> None:
         help="被测系统模型（如 gpt-4.1、gemini-3-pro-preview，覆盖 metadata 默认值，需 editable=true）",
     )
     parser.add_argument(
+        "--user-model",
+        type=str,
+        default=None,
+        help="扮演虚拟用户的模型，仅 auto 模式数据集有效（如 anthropic/claude-sonnet-4.6）。"
+        "不传则用 AutoTestAgent.DEFAULT_MODEL",
+    )
+    parser.add_argument(
+        "--eval-model",
+        type=str,
+        default=None,
+        help="判分器模型（覆盖用例 eval 配置里的 model / judge_model / extractor_model）。"
+        "纯规则判分的题型不受影响",
+    )
+    parser.add_argument(
         "--system-prompt",
         type=str,
         default=None,
@@ -481,6 +495,11 @@ def main() -> None:
         cli_overrides["target_type"] = args.target_type  # 内部路由用，会在 run_benchmark 中 pop
     if args.target_model:
         cli_overrides["model"] = args.target_model
+    if args.user_model:
+        # 保留键：给虚拟用户用，bench_item_to_test_case 会取走，不参与 target 解析
+        cli_overrides["user_model"] = args.user_model
+    if args.eval_model:
+        cli_overrides["eval_model"] = args.eval_model  # 同上，给判分器用
     if args.system_prompt:
         cli_overrides["system_prompt"] = args.system_prompt
     for kv in args.target_override:
