@@ -455,9 +455,36 @@ def bench_item_to_test_case(
             if isinstance(tool_ctx, dict) and tool_ctx.get("user_email"):
                 matched_override = {"user_email": tool_ctx["user_email"]}
 
-    effective_target = resolve_effective_target(spec, cli_overrides, matched_override)
+    # A run has three LLM-driven actors — the virtual user, the target, and the
+    # judge — and `cli_overrides` reaches only the target. The other two are
+    # addressed by reserved keys, split off here: left in, each would trip the
+    # "field is not editable, ignored" warning on every single case. `target_type`
+    # is the pre-existing member of that family and did exactly that.
+    target_overrides_from_cli = dict(cli_overrides or {})
+    user_model = target_overrides_from_cli.pop("user_model", None)
+    eval_model = target_overrides_from_cli.pop("eval_model", None)
+    target_overrides_from_cli.pop("target_type", None)
+
+    effective_target = resolve_effective_target(spec, target_overrides_from_cli or None, matched_override)
     user_dict = item.user.model_dump(exclude={"target_overrides"})
+    if user_model and user_dict.get("type") == "auto":
+        user_dict["model"] = user_model
     user_info = _USER_ADAPTER.validate_python(user_dict)
+
+    eval_config = item.eval
+    if eval_model:
+        # Evaluators disagree on the field name (`model`, `judge_model`,
+        # `extractor_model`), so set whichever this one declares rather than
+        # guessing one and silently doing nothing on the others.
+        for field in ("model", "judge_model", "extractor_model"):
+            if field in type(eval_config).model_fields:
+                eval_config = eval_config.model_copy(update={field: eval_model})
+                break
+        else:
+            _logger.warning(
+                "评测器 %s 没有可覆盖的模型字段，--eval-model 对它无效",
+                type(eval_config).__name__,
+            )
 
     # answer_format_hint: 如果 eval config 定义了格式提示，追加到最后一条 strict_inputs
     hint = getattr(item.eval, "answer_format_hint", None)
@@ -470,7 +497,7 @@ def bench_item_to_test_case(
         description=item.description,
         user=user_info,
         target=effective_target,
-        eval=item.eval,
+        eval=eval_config,
         history=item.history,  # dict 列表 → TestCase field_validator 自动归一化为 BaseMessage
         tags=item.tags,
     )

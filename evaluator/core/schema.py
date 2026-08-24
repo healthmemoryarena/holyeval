@@ -226,6 +226,16 @@ class AutoUserInfo(BaseModel):
             "透传到被测后端的 file_list 字段）。"
         ),
     )
+    model: Optional[str] = Field(
+        None,
+        description=(
+            "扮演这个虚拟用户的 LLM。留空则用 auto TestAgent 的默认值。"
+            "CLI 用 --user-model 覆盖。\n"
+            "这个字段存在的原因：它原先只是 AutoTestAgent 构造函数的一个默认参数，"
+            "而 orchestrator 建实例时从不传它 —— 于是所有 auto 模式的数据集都被钉在"
+            "那个默认模型上，没有 OPENAI_API_KEY 的环境里一条都跑不了，且无处可改。"
+        ),
+    )
 
 
 class ManualUserInfo(BaseModel):
