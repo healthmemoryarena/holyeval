@@ -430,30 +430,30 @@ def bench_item_to_test_case(
         _OVERRIDE_FALLBACKS: Dict[str, list[str]] = {
             "dyg_rag_api": ["hippo_rag_api"],
             "hippo_rag_api": ["dyg_rag_api"],
-            "theta_smart_api": ["theta_api"],
         }
         for fallback_type in _OVERRIDE_FALLBACKS.get(spec.type, []):
             matched_override = item.user.target_overrides.get(fallback_type)
             if matched_override is not None:
                 break
 
-    # 跨族 fallback: 从 theta_api.email 推导 user_email（hippo_rag_api / dyg_rag_api / naive_rag_api / evermem / mem0_rag_api 共用）
-    if matched_override is None and spec.type in ("hippo_rag_api", "dyg_rag_api", "naive_rag_api", "evermem", "mem0_rag_api"):
-        theta_override = item.user.target_overrides.get("theta_api")
-        if theta_override and isinstance(theta_override, dict) and "email" in theta_override:
-            matched_override = {"user_email": theta_override["email"]}
-
-    # 跨族 fallback: hermes 从 llm_api.tool_context.user_email 或 theta_api.email 推导 user_email
-    if matched_override is None and spec.type == "hermes":
+    # 跨族 fallback: 只认身份的 target 从 llm_api.tool_context.user_email 取 user_email。
+    #
+    # 这些 target 的 override 里唯一有用的字段就是「问的是谁」，而每条用例都要在
+    # llm_api 那侧写一遍同一个邮箱，所以复用它，而不是要求语料为每个 target 各写一份。
+    # 随附语料实测：35,535 条带 override 的用例，全部有这个字段，缺失 0 条。
+    #
+    # 这里原先读的是另一个 target 的键名，而那个 target 并不在本仓库里 —— 一个不存在的
+    # target 的键成了几个公开 target 的唯一身份来源，等于把它的形状焊死在语料里。改读
+    # llm_api 之后语料里就不必再留那个键，35,535 条用例的 override 也随之清干净。
+    _IDENTITY_ONLY_TARGETS = (
+        "hippo_rag_api", "dyg_rag_api", "naive_rag_api", "evermem", "mem0_rag_api", "hermes",
+    )
+    if matched_override is None and spec.type in _IDENTITY_ONLY_TARGETS:
         llm_override = item.user.target_overrides.get("llm_api")
-        if llm_override and isinstance(llm_override, dict):
+        if isinstance(llm_override, dict):
             tool_ctx = llm_override.get("tool_context")
-            if isinstance(tool_ctx, dict) and "user_email" in tool_ctx:
+            if isinstance(tool_ctx, dict) and tool_ctx.get("user_email"):
                 matched_override = {"user_email": tool_ctx["user_email"]}
-        if matched_override is None:
-            theta_override = item.user.target_overrides.get("theta_api")
-            if theta_override and isinstance(theta_override, dict) and "email" in theta_override:
-                matched_override = {"user_email": theta_override["email"]}
 
     effective_target = resolve_effective_target(spec, cli_overrides, matched_override)
     user_dict = item.user.model_dump(exclude={"target_overrides"})

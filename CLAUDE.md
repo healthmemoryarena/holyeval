@@ -13,16 +13,14 @@ HolyEval is an open-source LLM evaluation framework. Reproduce any published ben
 uv sync
 
 # Run benchmarks
-python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1
-python -m benchmark.basic_runner healthbench full --target-model gpt-4.1 --limit 50
-python -m benchmark.basic_runner healthbench hard --target-model gemini-3-pro -p 5
-python -m benchmark.basic_runner medcalc sample --target-model gpt-4.1
-python -m benchmark.basic_runner agentclinic medqa --target-model gpt-4.1
-python -m benchmark.basic_runner memoryarena sample --target-model gpt-4.1
-python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-4.1        # ESLBench quick (50 cases)
-python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-4.1 -p 5       # ESLBench full (1800 cases)
-python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --ids hb_abc
-python -m benchmark.basic_runner healthbench sample --target-model gpt-4.1 --limit 10 -p 3 -v
+python -m benchmark.basic_runner healthbench sample --target-model gpt-5.4-mini
+python -m benchmark.basic_runner healthbench full --target-model gpt-5.4-mini --limit 50
+python -m benchmark.basic_runner healthbench hard --target-model gemini-3-pro-preview -p 5
+python -m benchmark.basic_runner medcalc sample --target-model gpt-5.4-mini
+python -m benchmark.basic_runner eslbench sample50-20260324 --target-model gpt-5.4-mini        # ESLBench quick (50 cases)
+python -m benchmark.basic_runner eslbench full-20260324 --target-model gpt-5.4-mini -p 5       # ESLBench full (1800 cases)
+python -m benchmark.basic_runner healthbench sample --target-model gpt-5.4-mini --ids hb_abc
+python -m benchmark.basic_runner healthbench sample --target-model gpt-5.4-mini --limit 10 -p 3 -v
 python -m benchmark.basic_runner healthbench sample --resume
 
 # Data preparation (required before running ESLBench via CLI; automatic via Web UI)
@@ -30,19 +28,11 @@ python -m generator.eslbench.prepare_data            # download HF data + build 
 python -m generator.eslbench.prepare_data --force    # force re-download + rebuild
 
 # Data conversion (external datasets → HolyEval format)
-python -m generator.healthbench.converter input.jsonl output.jsonl --target-model gpt-4.1
-python -m generator.medcalc.converter
-python -m generator.agentclinic.converter <input.jsonl> <output.jsonl>
-python -m generator.medhall.data_gen --count 15 --output generator/medhall/raw_data.jsonl
-python -m generator.medhall.converter generator/medhall/raw_data.jsonl benchmark/data/medhall/theta.jsonl
-python -m generator.memoryarena.converter
+python -m generator.healthbench.converter input.jsonl output.jsonl
+python -m generator.medcalc.converter input.csv output.jsonl
 
 # Web UI
-python -m web    # uvicorn :8000, auto-reload
-
-# Tests
-pytest evaluator/tests/
-pytest evaluator/tests/test_e2e.py
+python -m web    # uvicorn :8000 (+ health :8001)
 
 # Lint
 ruff check .
@@ -87,8 +77,8 @@ Plugins activate on import (in `evaluator/plugin/`). The `core/` layer depends o
 | Agent Type | Interface | Built-in Plugins |
 |---|---|---|
 | **TestAgent** (virtual user) | `core/interfaces/abstract_test_agent.py` | `auto` (LLM-driven), `manual` (scripted) |
-| **TargetAgent** (system under test) | `core/interfaces/abstract_target_agent.py` | `llm_api` (OpenAI/Gemini) |
-| **EvalAgent** (evaluator) | `core/interfaces/abstract_eval_agent.py` | `semantic`, `healthbench`, `medcalc`, `hallucination`, `kg_qa`, `memoryarena` |
+| **TargetAgent** (system under test) | `core/interfaces/abstract_target_agent.py` | `llm_api`, `hermes`, `evermem`, `mem0_rag_api`, `naive_rag_api`, `hippo_rag_api`, `dyg_rag_api` |
+| **EvalAgent** (evaluator) | `core/interfaces/abstract_eval_agent.py` | `semantic`, `rubric`, `healthbench`, `medcalc`, `kg_qa`, `record_retrieval`, `dialogue_quality`, `engagement` |
 
 Add custom plugins by inheriting from the abstract base classes. Use `/add-eval-agent` or `/add-target-agent` skills for guided scaffolding.
 
@@ -130,12 +120,10 @@ benchmark/
 │   ├── eslbench/         # ESLBench health KG Q&A (requires data preparation)
 │   │   ├── tools/        # retrieve.py — JSON lookup + DuckDB query tools
 │   │   └── .data/        # Downloaded user data + DuckDB (auto-created by prepare_data)
+│   ├── eslbench_distractor/  # Distractor-injected variant (shares eslbench's prepared data)
 │   ├── healthbench/      # HealthBench medical AI
 │   ├── medcalc/          # MedCalc-Bench calculations
-│   ├── agentclinic/      # AgentClinic clinical diagnosis
-│   ├── medhall/          # MedHall hallucination detection
-│   ├── memoryarena/      # MemoryArena agent memory
-│   └── history_demo/     # $ref demo
+│   └── virtual_user/     # Virtual-user opening-line engagement
 ├── report/               # Output reports
 └── basic_runner.py       # CLI runner
 ```
@@ -150,7 +138,7 @@ Report filename format: `{dataset}_{target_label}_{YYYYMMDD_HHmmss}.json`
 {
   "description": "...",
   "target": [
-    { "type": "llm_api", "fields": { "model": {"default": "gpt-4.1", "editable": true, "required": true} } }
+    { "type": "llm_api", "fields": { "model": {"default": "gpt-5.4-mini", "editable": true, "required": true} } }
   ],
   "params": {
     "shared_history": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
@@ -164,7 +152,7 @@ Report filename format: `{dataset}_{target_label}_{YYYYMMDD_HHmmss}.json`
 
 ### Test Cases
 
-JSONL files in `benchmark/data/` (benchmarks) and `evaluator/tests/fixtures/cases/` (dev). Each case specifies user config, target config, eval config, and optional `history`.
+JSONL files in `benchmark/data/`. Each case specifies user config, target config, eval config, and optional `history`.
 
 Key fields:
 - **`strict_inputs`** (`List[str]`): Manual mode sends these sequentially
@@ -177,14 +165,11 @@ Key fields:
 - **`generator/eslbench/prepare_data.py`** — ESLBench data preparation: HuggingFace download + per-user DuckDB creation
 - **`generator/healthbench/converter.py`** — HealthBench JSONL → BenchItem
 - **`generator/medcalc/converter.py`** — MedCalc-Bench CSV → BenchItem
-- **`generator/agentclinic/converter.py`** — AgentClinic JSONL → BenchItem
-- **`generator/medhall/converter.py`** — MedHall JSONL → BenchItem
-- **`generator/memoryarena/converter.py`** — MemoryArena HuggingFace → BenchItem
 
 ### Web UI
 
 ```bash
-python -m web    # uvicorn :8000, auto-reload
+python -m web    # uvicorn :8000 (+ health :8001)
 ```
 
 | Page | Route | Description |
@@ -205,7 +190,11 @@ Configure in `.env` (copy from `.env.example`):
 | `GOOGLE_API_KEY` | At least one LLM | Google Gemini API key |
 | `HF_TOKEN` | ESLBench | HuggingFace token for downloading ESLBench data |
 | `OPENROUTER_API_KEY` | Optional | OpenRouter multi-provider access |
-| `HOLYEVAL_PORT` | Optional | Web UI port (default: 8000) |
+| `HOLYEVAL_WEB_PORT` | Optional | Web UI port (default: 8000) |
+| `HOLYEVAL_HEALTH_PORT` | Optional | Health-check port (default: 8001) |
+| `HOLYEVAL_RELOAD` | Optional | `true` enables uvicorn auto-reload (default: false) |
+| `HOLYEVAL_GATEWAY_BASE_URL` | Optional | Your own OpenAI-compatible gateway (vLLM / LiteLLM / a proxy). Required only when a model name is written as `[label]model` |
+| `HOLYEVAL_GATEWAY_API_KEY` | Optional | API key for that gateway |
 
 ## Code Style
 

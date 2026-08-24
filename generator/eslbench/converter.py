@@ -1,7 +1,7 @@
 """
 KG Evaluation Queries → HolyEval BenchItem 转换器
 
-将 thetagendata 的 kg_evaluation_queries.json 转为 HolyEval BenchItem JSONL，
+将 KG 评测查询 JSON（kg_evaluation_queries.json）转为 HolyEval BenchItem JSONL，
 使用 kg_qa 评估器，保留完整 ground truth 元数据。
 
 target_overrides 仅包含 per-case 参数（email / tool_context），
@@ -10,7 +10,7 @@ agent / language / tool_group 等公共参数由 metadata.json 默认值提供�
 用法:
   python -m generator.eslbench.converter \
     --input /path/to/kg_evaluation_queries.json \
-    --output benchmark/data/eslbench/sample.jsonl \
+    --output benchmark/data/eslbench/<dataset>.jsonl \
     --user-email user110@demo
 """
 
@@ -79,6 +79,7 @@ def convert_queries(
         expected_value = gt.get("expected_value", "")
         key_points = gt.get("key_points", [])
         source_data = gt.get("source_data")
+        history = q.get("history")  # 记忆投毒等的伪造助手轮 → BenchItem.history
         raw_diff = q.get("difficulty", "direct")
         diff = _DIFFICULTY_MAP.get(raw_diff, raw_diff)
 
@@ -99,14 +100,20 @@ def convert_queries(
             "user": {
                 "type": "manual",
                 "strict_inputs": [query_text],
+                # 两个键写的是同一个邮箱，因为两个 target 读的位置不同：
+                # `llm_api.tool_context.user_email` 是 llm_api 读的位置，也是
+                # bench_schema 里几个只认身份的 target（RAG 那几个、hermes）的取值来源；
+                # `mirobody.user_email` 是 mirobody target 读的位置。
                 "target_overrides": {
-                    "theta_api": {"email": user_email},
                     "llm_api": {"tool_context": {"user_email": user_email}},
+                    "mirobody": {"user_email": user_email},
                 },
             },
             "eval": eval_config,
             "tags": [f"difficulty:{diff}", f"answer_type:{answer_type}"],
         }
+        if history:
+            item["history"] = history
         items.append(item)
 
     logger.info("转换 %d 条 queries (email=%s)", len(items), user_email)
