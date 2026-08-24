@@ -2,7 +2,7 @@
 
 This is the demo's opening beat: a file a newcomer can drop into mirobody and
 watch get parsed, unit-normalised, LOINC-coded and then reasoned over. It pairs
-with :mod:`mirobody.eval.seed` — seed the user's *earlier* panels as history,
+with :mod:`generator.eslbench.seed_mirobody` — seed the user's *earlier* panels,
 hand them the *latest* one as a PDF, and "what's my lipid trend?" has real
 history to trend against instead of a single point.
 
@@ -37,12 +37,29 @@ SYNTHETIC_BANNER = "SYNTHETIC SAMPLE - GENERATED DATA, NOT A REAL PATIENT RECORD
 # dropping rows off the bottom of the page.
 MAX_ROWS = 34
 
-# Lipid markers lead the table: the demo question is about the lipid trend, and
-# a GIF frame only shows the first screenful.
-_PRIORITY_PATTERNS = (
-    re.compile(r"cholesterol|triglycer|\bhdl\b|\bldl\b|lipid|apolipo", re.I),
-    re.compile(r"hba1c|glucose|glycated", re.I),
-)
+# The analytes a real lipid-and-glucose order prints, in the order it prints
+# them. Ranking by position in this list rather than by a broad `lipid|glucose`
+# regex plus alphabetical order, which surfaced whatever sorted first —
+# oxidised LDL, small dense LDL, LDL particle number. Those are send-out
+# subfraction assays; leading a routine panel with them is not what a lab does,
+# and they are also the least standardisable rows in the dataset.
+#
+# The list deliberately keeps rows that do not resolve (HDL, LDL, the ratio):
+# a panel where every row standardises would misrepresent what this step does.
+_PANEL_ORDER = tuple(re.compile(p, re.I) for p in (
+    r"^TotalCholesterol",
+    r"^Triglycerides",
+    r"^High-DensityLipoprotein",
+    r"^Low-DensityLipoprotein",
+    r"^Non-HDLCholesterol",
+    r"^Cholesterol/HDLRatio",
+    r"^ApolipoproteinA",
+    r"^ApolipoproteinB",
+    r"^FastingBloodGlucose",
+    r"^PostprandialBloodGlucose",
+    r"^GlycatedHemoglobin",
+    r"^(DiabetesScreening-)?Insulin$",
+))
 
 _PAGE_W, _PAGE_H = 595, 842
 _MARGIN = 48
@@ -84,43 +101,114 @@ _CAMEL_BOUNDARIES = (
 # splitting at all, while `TotalCholesterol` clearly needs it.
 _ABBREVIATION_MAX = 6
 
+# Panel headings, not part of an analyte's printed name. ESL-Bench prefixes some
+# ids with the section they belong to; a real report prints the section once as a
+# heading and never glues it onto the row.
+_SECTION_PREFIXES = frozenset({
+    "Lipid", "PhysicalExamination", "DiabetesScreening", "Urinalysis",
+})
+
+
+def _is_abbreviation(segment: str) -> bool:
+    """Whether a hyphen-delimited segment is a trailing lab abbreviation.
+
+    ``TC``, ``FBG``, ``HbA1c``, ``US``, ``eGFR``, ``hs``, ``25(OH)D`` — short,
+    and carrying no more than two lowercase letters. An English word of that
+    length cannot: ``Score`` has four, ``Ratio`` four, ``Density`` six. One
+    shape test is enough; a lookup table of known abbreviations turned out to be
+    entirely redundant with it.
+
+    Only the *trailing* segments are tested, so ``HDL`` being strippable does
+    not endanger ``Non-HDLCholesterol`` — stripping stops at the first segment
+    that is a word, and the analyte's own name is to the left of it.
+    """
+    if not segment or len(segment) > _ABBREVIATION_MAX + 2:
+        return False
+    if segment.count("(") != segment.count(")"):
+        return False        # `OH)` of `Vitamin D (25-OH)`, not an abbreviation:
+                            # stripping it would strand the opening bracket
+    letters = [c for c in segment if c.isalpha()]
+    if not letters:
+        return True                                     # 25(OH)D, 1,25(OH)2D, -1
+    return sum(c.islower() for c in letters) <= 2
+
 
 def display_name(raw: str) -> str:
-    """Space out ESL-Bench's run-together analyte names.
+    """Turn an ESL-Bench indicator id into the name a lab report would print.
 
-    ``TotalCholesterol-TC`` → ``Total Cholesterol-TC``,
-    ``HemoglobinA1c-HbA1c`` → ``Hemoglobin A1c-HbA1c``. Real reports do not run
-    words together, and the raw form reads as a rendering fault in a demo.
+    ``TotalCholesterol-TC`` → ``Total Cholesterol``,
+    ``Lipid-FreeFattyAcids`` → ``Free Fatty Acids``,
+    ``PhysicalExamination-SystolicBloodPressure`` → ``Systolic Blood Pressure``.
 
-    Splitting is per hyphen-delimited segment and skips short ones, so lab
-    abbreviations survive. It stays conservative enough that mirobody's own
-    indicator normalisation — which folds CamelCase the same way — still
-    matches the parsed result against the seeded history.
+    ESL-Bench ids are machine identifiers: CamelCase words, an optional section
+    prefix, and an optional trailing abbreviation. A report prints none of that
+    scaffolding — it prints the analyte. Both affixes are dropped and the
+    remaining CamelCase is spaced out.
+
+    Printing the id nearly verbatim, as this used to, cost the demo its whole
+    point: of ESL-Bench's 190 indicator names exactly **one** survived
+    ``mirobody.engine.resolve`` as ``Total Cholesterol-TC`` and friends, versus
+    80 as plain analyte names. The extractor was reading the page correctly and
+    every reading still landed unresolved.
+
+    Names that do not resolve even so — ``High-Density Lipoprotein`` (a report
+    would say ``HDL Cholesterol``), imaging, ECG intervals, derived ratios — are
+    left alone. Rewriting them into whatever the resolver happens to accept
+    would make the sample prove nothing about the resolver.
     """
-    segments = []
-    for segment in raw.split("-"):
+    segments = raw.split("-")
+
+    while len(segments) > 1 and _is_abbreviation(segments[-1]):
+        segments.pop()
+    if len(segments) > 1 and segments[0] in _SECTION_PREFIXES:
+        segments.pop(0)
+
+    spaced = []
+    for segment in segments:
         if len(segment) > _ABBREVIATION_MAX:
             for pattern in _CAMEL_BOUNDARIES:
                 segment = pattern.sub(" ", segment)
-        segments.append(segment)
-    return re.sub(r"\s{2,}", " ", "-".join(segments)).strip()
+        spaced.append(segment)
+    return re.sub(r"\s{2,}", " ", "-".join(spaced)).strip()
 
 
 def _is_alias_of(a: str, b: str) -> bool:
-    """Whether one analyte name is a prefixed alias of the other.
+    """Whether two printed names denote the same analyte.
 
-    ``Lipid-LDL/HDLRatio`` vs ``LDL/HDLRatio`` — same analyte, printed twice.
+    ``Lipid-LDL/HDLRatio`` vs ``LDL/HDLRatio`` — same analyte, carried twice by
+    the panel. Equality counts: now that :func:`display_name` drops the section
+    prefix, that pair renders to one identical string, and an alias test that
+    demanded the two differ would let the duplicate straight through.
     """
     x, y = a.lower().replace(" ", ""), b.lower().replace(" ", "")
-    return x != y and (x.endswith(y) or y.endswith(x))
+    return x == y or x.endswith(y) or y.endswith(x)
+
+
+def _is_quantity(value: str) -> bool:
+    """Whether a panel entry is a measured quantity rather than a narrative.
+
+    ESL-Bench panels mix the two: ``BodyMassIndex-BMI`` carries ``27.1``, while
+    ``AbdominalUltrasound-ABD-US`` carries ``Mild hepatic steatosis``. An
+    analyte table has one column for the result, sized for a number — a
+    radiologist's impression lands there clipped to ``Mild hepat``, and it is
+    not a reading a resolver could ever code. Narrative findings belong to an
+    impressions section, which this one-page report does not have.
+    """
+    try:
+        float(value)
+    except ValueError:
+        return False
+    return True
 
 
 def select_measurements(panel: dict, *, limit: int = 12) -> list[Measurement]:
-    """Pick *limit* measurements from an exam panel, lipids first.
+    """Pick *limit* measurements from an exam panel, in printed-report order.
 
     Panels carry ~200 indicators; a lab report the size of a phone book makes a
-    poor demo, so this narrows to a believable single-page panel. Aliased
-    duplicates are collapsed — see :func:`_is_alias_of`.
+    poor demo, so this narrows to a believable single-page panel, ordered by
+    :data:`_PANEL_ORDER`. Anything the list does not name falls to the end in
+    alphabetical order, so a panel missing some of those rows still fills up.
+    Aliased duplicates are collapsed — see :func:`_is_alias_of`.
     """
     if limit > MAX_ROWS:
         raise ValueError(f"limit {limit} exceeds MAX_ROWS ({MAX_ROWS}) for a single page")
@@ -128,10 +216,10 @@ def select_measurements(panel: dict, *, limit: int = 12) -> list[Measurement]:
     indicators = panel.get("indicators") or {}
 
     def rank(name: str) -> int:
-        for i, pattern in enumerate(_PRIORITY_PATTERNS):
-            if pattern.search(name):
+        for i, pattern in enumerate(_PANEL_ORDER):
+            if pattern.match(name):
                 return i
-        return len(_PRIORITY_PATTERNS)
+        return len(_PANEL_ORDER)
 
     ordered = sorted(indicators.items(), key=lambda kv: (rank(kv[0]), kv[0]))
 
@@ -143,6 +231,9 @@ def select_measurements(panel: dict, *, limit: int = 12) -> list[Measurement]:
         canonical = str(raw.get("indicator_name") or name)
         value = str(raw.get("value") if raw.get("value") is not None else "")
         unit = str(raw.get("unit") or "")
+
+        if not _is_quantity(value):
+            continue
 
         if any(
             m.value == value and m.unit == unit and _is_alias_of(m.name, display_name(canonical))
@@ -363,7 +454,7 @@ def render_pdf(report: LabReport) -> bytes:
     out += (
         f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R "
         f"/Info << /Title (Synthetic Laboratory Report) "
-        f"/Producer (mirobody.eval) /CreationDate ({stamp}) >> >>\n"
+        f"/Producer (mirobody-eval) /CreationDate ({stamp}) >> >>\n"
         f"startxref\n{xref_at}\n%%EOF\n"
     ).encode("latin-1")
 

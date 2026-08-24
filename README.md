@@ -155,6 +155,11 @@ uv run python -m generator.eslbench.labreport     --users user5086@demo -o sampl
 `user5086@demo` is a generated 58-year-old with type 2 diabetes whose lipids improve and then drift
 back across four panels. Every value is synthetic; the PDF says so on its front page.
 
+Eight of the twelve printed rows come back with a LOINC code and four do not — a report prints
+`High-Density Lipoprotein` where LOINC codes `Cholesterol in HDL`, and `LDL/HDL Ratio` is a derived
+ratio with no observation code at all. That mix is deliberate: it exercises the resolver's misses
+alongside its hits, which a panel where every row resolved would not.
+
 ## AI-Native Development with Claude Code
 
 mirobody-eval is designed to be operated entirely through [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Every common task has a dedicated slash command. You describe your intent in natural language; Claude Code reads the code, generates files, runs tests, and validates the result.
