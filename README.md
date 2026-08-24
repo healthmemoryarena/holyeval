@@ -19,6 +19,10 @@
 </p>
 
 <p align="center">
+  <strong>English</strong> &middot; <strong><a href="README.zh-CN.md">简体中文</a></strong>
+</p>
+
+<p align="center">
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#evaluate-your-own-mirobody-deployment">Evaluate mirobody</a> &middot;
   <a href="#ai-native-development-with-claude-code">Claude Code</a> &middot;
@@ -279,7 +283,7 @@ class MyEvalAgent(AbstractEvalAgent, name="my_eval", params_model=MyEvalInfo):
 | Agent Type | Role | Built-in Plugins |
 |---|---|---|
 | **TestAgent** | Virtual user | `auto` (LLM-driven), `manual` (scripted) |
-| **TargetAgent** | System under test | `llm_api` (OpenAI / Gemini), `hermes`, `evermem`, `mem0_rag_api`, `naive_rag_api`, `hippo_rag_api`, `dyg_rag_api` |
+| **TargetAgent** | System under test | `mirobody` (a self-hosted deployment), `llm_api` (OpenAI / Gemini / OpenRouter), `hermes`, `evermem`, `mem0_rag_api`, `naive_rag_api`, `hippo_rag_api`, `dyg_rag_api` |
 | **EvalAgent** | Evaluator | `semantic`, `rubric`, `healthbench`, `medcalc`, `kg_qa`, `record_retrieval`, `dialogue_quality`, `engagement` |
 
 ### Project Structure
@@ -428,12 +432,16 @@ uv run python -m generator.eslbench.prepare_data --force   # force rebuild
 
 # Run benchmark
 uv run python -m benchmark.basic_runner <benchmark> <dataset> [options]
-  --target-model MODEL    # LLM model to evaluate (e.g., gpt-5.4-mini, gemini-3-pro-preview)
   --target-type TYPE      # Target agent type (for multi-target benchmarks)
+  --target-model MODEL    # the model under test (e.g. gpt-5.4-mini, anthropic/claude-sonnet-4.6)
+  --user-model MODEL      # the model playing the virtual user (auto-mode datasets only)
+  --eval-model MODEL      # the model doing the judging (rule-scored answers ignore it)
+  --system-prompt TEXT    # override the target's system prompt
+  --target-override K=V   # override an editable target field, e.g. agent=Deep
   --limit N               # Max cases to run
   --ids id1,id2           # Run specific case IDs
-  -p N                    # Concurrency (default: 0 = unlimited)
-  -v                      # Verbose output
+  -p, --parallel N        # Concurrency (default: 0 = unlimited)
+  -v, --verbose           # Verbose output
   --resume                # Resume from last checkpoint
 
 # Convert external datasets
@@ -445,6 +453,22 @@ uv run python -m generator.virtual_user case_gen --seed 42 \
 # Web UI
 uv run python -m web             # http://localhost:8000
 ```
+
+A run drives up to three models — the virtual user, the target, and the judge — and each is named
+separately, so one provider can serve all three:
+
+```bash
+uv run python -m benchmark.basic_runner virtual_user round1 \
+    --target-type llm_api --target-model anthropic/claude-sonnet-4.6 \
+    --user-model anthropic/claude-sonnet-4.6 \
+    --eval-model anthropic/claude-sonnet-4.6
+```
+
+The judge is consulted only for `text` and `behavioral` answers. `numeric_value`, `boolean` and
+`list` are scored by rule and need no key at all — 106 of the 200 cases in ESL-Bench's
+`sample200-20260430` are in that group. When a judge is configured but cannot run, its cases are
+reported as `error` rather than scored: a judge that never ran has said nothing about the target,
+and averaging it in would read as a result.
 
 ## Configuration
 
@@ -462,6 +486,16 @@ Environment variables (in `.env`):
 | `HOLYEVAL_HEALTH_PORT` | Optional | Health-check port (default: 8001) |
 | `HOLYEVAL_RELOAD` | Optional | `true` enables uvicorn auto-reload (default: false) |
 
+The `mirobody` target reads its own infrastructure settings from the environment rather than from a
+dataset, because they describe *which deployment you are pointing at* rather than what to ask it:
+
+| Variable | Required | Description |
+|---|---|---|
+| `MIROBODY_CONFIG` | Recommended | Absolute path to the deployment's `config.{ENV}.yaml`. Without it, `Config.init()` searches the working directory — this repo, not the deployment — and falls back to built-in defaults |
+| `MIROBODY_BASE_URL` | Optional | Deployment address (default `http://localhost:18080`) |
+| `MIROBODY_TIMEOUT` | Optional | Per-turn timeout in seconds (default 300) |
+| `MIROBODY_PROVIDER` | Optional | Override the deployment agent's LLM provider; empty means use its own default |
+
 ## Roadmap
 
 ### In Progress
@@ -475,6 +509,9 @@ Environment variables (in `.env`):
 ## Development
 
 ```bash
+# Unit tests — pure logic, no database, no network, no model calls
+uv run --group dev python -m pytest generator/ evaluator/ -q
+
 # Sanity check — plugin registries load
 uv run python -c "import evaluator.plugin.eval_agent, evaluator.plugin.target_agent; \
 from evaluator.core.interfaces.abstract_eval_agent import AbstractEvalAgent; \
@@ -484,6 +521,10 @@ print(sorted(AbstractEvalAgent.get_all()))"
 uv run ruff check .
 uv run ruff format .
 ```
+
+CI runs the same three, plus a check that every dataset in the repo declares a target and an
+evaluator that actually exist — the failure mode it catches is a dataset that ships referring to a
+plugin nobody can install.
 
 ## Contributing
 
