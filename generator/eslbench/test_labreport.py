@@ -57,14 +57,15 @@ PROFILE = {
 
 
 class TestSelectMeasurements:
-    def test_lipid_markers_come_first(self):
-        """The demo asks "what's my lipid trend" — those rows must be on the
-        page, and near the top where a GIF frame still shows them."""
-        rows = select_measurements(PANEL, limit=4)
-        names = [m.name for m in rows]
+    def test_the_panel_leads_the_way_a_report_prints_it(self):
+        """Total cholesterol and triglycerides head a lipid order. Ranking used
+        to be `lipid|cholesterol` plus alphabetical, which led with whatever
+        sorted first — oxidised LDL, small dense LDL — assays a routine panel
+        does not open with."""
+        names = [m.name for m in select_measurements(PANEL, limit=4)]
 
-        assert "Total Cholesterol-TC" in names[:3]
-        assert "Triglycerides-TG" in names[:3]
+        assert names[0] == "Total Cholesterol"
+        assert names[1] == "Triglycerides"
 
     def test_limit_is_respected(self):
         assert len(select_measurements(PANEL, limit=3)) == 3
@@ -73,10 +74,10 @@ class TestSelectMeasurements:
         rows = select_measurements(PANEL, limit=6)
 
         assert len(rows) == 6
-        assert "Hemoglobin A1c-HbA1c" in [m.name for m in rows]
+        assert "Hemoglobin A1c" in [m.name for m in rows]
 
     def test_carries_units_and_reference_ranges(self):
-        tc = next(m for m in select_measurements(PANEL, limit=6) if m.name == "Total Cholesterol-TC")
+        tc = next(m for m in select_measurements(PANEL, limit=6) if m.name == "Total Cholesterol")
 
         assert tc.value == "5.4"
         assert tc.unit == "mmol/L"
@@ -84,7 +85,7 @@ class TestSelectMeasurements:
         assert tc.abnormal is True
 
     def test_normal_rows_are_not_flagged(self):
-        glu = next(m for m in select_measurements(PANEL, limit=6) if m.name == "Urine Glucose-GLU")
+        glu = next(m for m in select_measurements(PANEL, limit=6) if m.name == "Urine Glucose")
 
         assert glu.abnormal is False
 
@@ -95,19 +96,74 @@ class TestSelectMeasurements:
         with pytest.raises(ValueError, match="MAX_ROWS"):
             select_measurements(PANEL, limit=MAX_ROWS + 1)
 
-    def test_camel_case_names_are_spaced_for_reading(self):
-        """ESL-Bench names run words together. A real lab report does not, and
-        the run-together form reads as a bug in a demo GIF."""
-        rows = select_measurements(PANEL, limit=6)
-        names = [m.name for m in rows]
+    def test_names_print_as_analytes_not_as_identifiers(self):
+        """ESL-Bench ids carry CamelCase words, an optional section prefix and a
+        trailing abbreviation. A report prints none of that scaffolding.
 
-        assert "Total Cholesterol-TC" in names
-        assert "High-Density Lipoprotein-HDL" in names
+        This is not cosmetic. While the abbreviation stayed attached, exactly
+        one of ESL-Bench's 190 indicator names survived mirobody's resolver —
+        `Total Cholesterol-TC` matches no LOINC entry — so every row of the
+        sample report came out unresolved and the standardization half of the
+        demo showed nothing at all. Stripping it takes that to 80.
+        """
+        names = [m.name for m in select_measurements(PANEL, limit=6)]
+
+        assert "Total Cholesterol" in names          # TotalCholesterol-TC
+        assert "High-Density Lipoprotein" in names   # internal hyphen survives
+        assert "Hemoglobin A1c" in names             # HbA1c is not split apart
+        assert "T-Score" in names                    # `Score` is a word, not an abbreviation
+
+    def test_narrative_findings_are_not_printed_as_results(self):
+        """Panels mix measurements with imaging impressions. The Result column
+        is one number wide, so `Mild hepatic steatosis` printed there arrives
+        clipped to `Mild hepat` — and no resolver can code it either."""
+        panel = {
+            **PANEL,
+            "indicators": {
+                "AbdominalUltrasound-ABD-US": {
+                    "indicator_name": "AbdominalUltrasound-ABD-US",
+                    "value": "Mild hepatic steatosis", "unit": "",
+                    "reference_range": "", "status": "abnormal",
+                },
+                "BodyMassIndex-BMI": {
+                    "indicator_name": "BodyMassIndex-BMI", "value": 27.1,
+                    "unit": "kg/m2", "reference_range": "18.5-24.0", "status": "abnormal",
+                },
+            },
+        }
+        rows = select_measurements(panel, limit=6)
+
+        assert [m.name for m in rows] == ["Body Mass Index"]
+
+    def test_section_prefixes_are_dropped(self):
+        """A report prints its section once as a heading, never glued onto each
+        row. `PhysicalExamination-SystolicBloodPressure` resolves only once the
+        prefix is gone."""
+        panel = {
+            **PANEL,
+            "indicators": {
+                "PhysicalExamination-SystolicBloodPressure": {
+                    "indicator_name": "PhysicalExamination-SystolicBloodPressure",
+                    "value": 148, "unit": "mmHg", "reference_range": "<130",
+                    "status": "abnormal",
+                },
+                "Lipid-FreeFattyAcids": {
+                    "indicator_name": "Lipid-FreeFattyAcids", "value": 0.62,
+                    "unit": "mmol/L", "reference_range": "0.1-0.6", "status": "abnormal",
+                },
+            },
+        }
+        names = [m.name for m in select_measurements(panel, limit=6)]
+
+        assert names == ["Free Fatty Acids", "Systolic Blood Pressure"]
 
     def test_prefixed_duplicate_rows_are_dropped(self):
         """Panels carry the same analyte twice under a prefixed alias
         (`LDL/HDLRatio` and `Lipid-LDL/HDLRatio`). Printing both looks like a
-        rendering fault."""
+        rendering fault.
+
+        Dropping the section prefix makes the pair render *identically*, which
+        an alias test requiring the two names to differ would wave through."""
         panel = {
             **PANEL,
             "indicators": {
@@ -204,7 +260,7 @@ class TestRenderPdf:
     def test_measurements_appear_in_the_content_stream(self):
         pdf = render_pdf(self.report())
 
-        assert b"Total Cholesterol-TC" in pdf
+        assert b"Total Cholesterol" in pdf
         assert b"5.4" in pdf
         assert b"mmol/L" in pdf
 
@@ -264,10 +320,13 @@ class TestRenderPdf:
         assert b"..." in pdf, "the over-long name should have been truncated"
         assert report.measurements[0].name.encode() not in pdf, "full name must not be drawn"
 
-    def test_short_names_are_left_alone(self):
+    def test_the_identifier_form_never_reaches_the_page(self):
+        """A report prints `Triglycerides`, not `Triglycerides-TG`. The trailing
+        abbreviation is what kept these names from standardizing."""
         pdf = render_pdf(self.report())
 
-        assert b"Triglycerides-TG" in pdf
+        assert b"Triglycerides" in pdf
+        assert b"Triglycerides-TG" not in pdf
 
     def test_declared_stream_length_matches_the_stream(self):
         pdf = render_pdf(self.report())
