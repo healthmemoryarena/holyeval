@@ -32,9 +32,10 @@ ESL-Bench 这个基准好，不是 mirobody 好。
 - `MIROBODY_BASE_URL`  被测部署地址（默认 http://localhost:18080）
 - `MIROBODY_TIMEOUT`   单轮超时秒数（默认 300）
 - `MIROBODY_PROVIDER`  覆盖 agent 的 LLM provider。留空用部署自己的默认值 ——
-                       注意 mirobody 硬编码的 `_DEFAULT_PROVIDER_DEEP`
-                       ("gemini-3.5-flash") 并不在它 config.yaml 的 provider 列表里，
-                       只配了 OPENROUTER_API_KEY 的部署必须显式指定（如 claude-sonnet）
+                       它按哪个 key 可用来选（OPENROUTER 走 claude-sonnet，
+                       DASHSCOPE 走 qwen），所以配好了 key 的部署通常不需要设这个。
+                       部署解不开自己那份密钥时（`CONFIG_ENCRYPTION_KEY` 缺失），
+                       它会把密文当 token 发出去，agent 报的是上游 401 而不是配置错
 """
 
 import json
@@ -170,35 +171,16 @@ class MirobodyTargetAgent(AbstractTargetAgent, name="mirobody", params_model=Mir
 
         本仓库的 runner 初始化的是自己的配置，不会碰 mirobody 的。而
         `execute_query` 和 JWT 签票都要读 mirobody 的配置（PG 连接、`JWT_KEY`），
-        没初始化就是 `ValueError: no configuration found`。所以这里按需初始化一次，
-        并且只在真的没初始化时做 —— 已经初始化过的进程（例如跑在 mirobody 自己
-        进程里）不该被重置。
+        没初始化就是 `ValueError: no configuration found`。
 
-        `MIROBODY_CONFIG` 给出配置文件的显式路径。不给的话 `Config.init()` 按
-        **当前工作目录**找 `config.{ENV}.yaml`，而 runner 的工作目录是本仓库、
-        不是那个部署 —— 于是它悄悄退回内置默认值，把 PG 库名取成操作系统用户名，
-        报出来的是 `database "admin" does not exist`：一条完全指不到真实原因的错。
+        实现在 `evaluator.utils.mirobody_config`，与 seeder 共用一份 —— 这两处
+        必须一致，而它们曾经不一致：seeder 调的是无参数的 `Config.init()`，于是
+        README 里「先 seed 再评测」的流程，第一步就连到了一个谁也没配过的库
+        （名字取自操作系统用户），而它后面那步评测却是好的。
         """
-        from mirobody.utils.config import global_config
+        from evaluator.utils.mirobody_config import ensure_mirobody_config
 
-        if global_config() is not None:
-            return
-
-        from mirobody.utils import Config
-
-        explicit = os.environ.get("MIROBODY_CONFIG", "").strip()
-        if explicit:
-            if not os.path.isfile(explicit):
-                raise RuntimeError(f"MIROBODY_CONFIG 指向的文件不存在: {explicit!r}")
-            await Config.init(explicit)
-        else:
-            await Config.init()
-
-        if global_config() is None:  # pragma: no cover - 配置缺失时的兜底提示
-            raise RuntimeError(
-                "mirobody 配置加载失败。用 MIROBODY_CONFIG 指定那个部署的 "
-                "config.{ENV}.yaml 绝对路径，或把工作目录切到它所在的目录。"
-            )
+        await ensure_mirobody_config()
 
     async def _resolve_user_id(self, email: str) -> str:
         """邮箱 → `health_app_user.id`。查不到就报错，不静默当成"没有数据"。"""

@@ -121,6 +121,7 @@ uv run python -m web                    # http://localhost:8000
 uv run python -m generator.eslbench.prepare_data
 
 # 2. 灌进你那个部署的 Postgres，并让指标可被检索
+export MIROBODY_CONFIG=/绝对路径/到/你的/mirobody/config.localdb.yaml   # 指明是哪个部署
 uv run python -m generator.eslbench.seed_mirobody --users user5086@demo
 
 # 3. 用 ESL-Bench 给你的部署打分
