@@ -1,7 +1,7 @@
 """
-KG Evaluation Queries → HolyEval BenchItem 转换器
+KG Evaluation Queries → mirobody-eval BenchItem 转换器
 
-将 KG 评测查询 JSON（kg_evaluation_queries.json）转为 HolyEval BenchItem JSONL，
+将 KG 评测查询 JSON（kg_evaluation_queries.json）转为 mirobody-eval BenchItem JSONL，
 使用 kg_qa 评估器，保留完整 ground truth 元数据。
 
 target_overrides 仅包含 per-case 参数（email / tool_context），
@@ -123,7 +123,7 @@ def convert_queries(
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-    parser = argparse.ArgumentParser(description="KG QA → HolyEval BenchItem")
+    parser = argparse.ArgumentParser(description="KG QA → mirobody-eval BenchItem")
     parser.add_argument("--input", required=True, help="kg_evaluation_queries.json 路径")
     parser.add_argument("--output", required=True, help="输出 JSONL 路径")
     parser.add_argument("--user-email", required=True, help="用户 email（如 user110@demo）")
