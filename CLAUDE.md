@@ -4,13 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-HolyEval is an open-source LLM evaluation framework. Reproduce any published benchmark with one command; extend with custom evaluators via a pluggable agent architecture.
+mirobody-eval is the evaluation half of [mirobody](https://github.com/thetahealth/mirobody): seed a synthetic user into your own deployment, score it, and reproduce any published benchmark with one command. Extend it with custom evaluators via a pluggable agent architecture.
 
 ## Commands
 
 ```bash
 # Install dependencies (uv workspace)
 uv sync
+
+# Add the engine, only needed for `--target-type mirobody`. The engine is 3.12+,
+# while this repo runs on 3.11 — on 3.11 the extra installs nothing.
+uv sync --extra mirobody --python 3.12
+
+# Score a self-hosted mirobody deployment (seed first — a fresh one is an empty DB).
+# MIROBODY_CONFIG names the deployment; both the seeder and the target agent read it.
+export MIROBODY_CONFIG=/abs/path/to/deployment/config.localdb.yaml
+python -m generator.eslbench.seed_mirobody --users user5086@demo
+python -m benchmark.basic_runner eslbench sample50-20260324 --target-type mirobody
 
 # Run benchmarks
 python -m benchmark.basic_runner healthbench sample --target-model gpt-5.4-mini
@@ -23,11 +33,20 @@ python -m benchmark.basic_runner healthbench sample --target-model gpt-5.4-mini 
 python -m benchmark.basic_runner healthbench sample --target-model gpt-5.4-mini --limit 10 -p 3 -v
 python -m benchmark.basic_runner healthbench sample --resume
 
+# A run drives up to three models independently: the virtual user, the target, the judge
+python -m benchmark.basic_runner eslbench sample50-20260324 \
+    --user-model gpt-4.1 --target-model gpt-5.4-mini --eval-model gpt-5.4-mini
+# Set a target field the dataset leaves editable. Which fields those are is per
+# dataset: eslbench pins the identity in each case and leaves `agent` open, so
+# `--target-override user_email=…` there is ignored with a warning, not applied.
+python -m benchmark.basic_runner eslbench sample50-20260324 \
+    --target-type mirobody --target-override agent=Mix
+
 # Data preparation (required before running ESLBench via CLI; automatic via Web UI)
 python -m generator.eslbench.prepare_data            # download HF data + build per-user DuckDB
 python -m generator.eslbench.prepare_data --force    # force re-download + rebuild
 
-# Data conversion (external datasets → HolyEval format)
+# Data conversion (external datasets → mirobody-eval format)
 python -m generator.healthbench.converter input.jsonl output.jsonl
 python -m generator.medcalc.converter input.csv output.jsonl
 
@@ -77,7 +96,7 @@ Plugins activate on import (in `evaluator/plugin/`). The `core/` layer depends o
 | Agent Type | Interface | Built-in Plugins |
 |---|---|---|
 | **TestAgent** (virtual user) | `core/interfaces/abstract_test_agent.py` | `auto` (LLM-driven), `manual` (scripted) |
-| **TargetAgent** (system under test) | `core/interfaces/abstract_target_agent.py` | `llm_api`, `hermes`, `evermem`, `mem0_rag_api`, `naive_rag_api`, `hippo_rag_api`, `dyg_rag_api` |
+| **TargetAgent** (system under test) | `core/interfaces/abstract_target_agent.py` | `mirobody` (a self-hosted deployment), `llm_api`, `hermes`, `evermem`, `mem0_rag_api`, `naive_rag_api`, `hippo_rag_api`, `dyg_rag_api` |
 | **EvalAgent** (evaluator) | `core/interfaces/abstract_eval_agent.py` | `semantic`, `rubric`, `healthbench`, `medcalc`, `kg_qa`, `record_retrieval`, `dialogue_quality`, `engagement` |
 
 Add custom plugins by inheriting from the abstract base classes. Use `/add-eval-agent` or `/add-target-agent` skills for guided scaffolding.
@@ -160,7 +179,7 @@ Key fields:
 
 ### Data Converters
 
-`generator/` transforms external datasets into HolyEval BenchItem format:
+`generator/` transforms external datasets into mirobody-eval BenchItem format:
 
 - **`generator/eslbench/prepare_data.py`** — ESLBench data preparation: HuggingFace download + per-user DuckDB creation
 - **`generator/healthbench/converter.py`** — HealthBench JSONL → BenchItem
@@ -195,9 +214,20 @@ Configure in `.env` (copy from `.env.example`):
 | `HOLYEVAL_RELOAD` | Optional | `true` enables uvicorn auto-reload (default: false) |
 | `HOLYEVAL_GATEWAY_BASE_URL` | Optional | Your own OpenAI-compatible gateway (vLLM / LiteLLM / a proxy). Required only when a model name is written as `[label]model` |
 | `HOLYEVAL_GATEWAY_API_KEY` | Optional | API key for that gateway |
+| `MIROBODY_CONFIG` | `--target-type mirobody` | Absolute path to the deployment's own `config.*.yaml`. Without it the engine searches the CWD — this repo, not the deployment — and falls back to built-in defaults, which surfaces as a connection error naming a database rather than a missing setting |
+| `MIROBODY_BASE_URL` | Optional | Deployment address (default `http://localhost:18080`) |
+| `MIROBODY_TIMEOUT` | Optional | Per-turn seconds (default 300) |
+| `MIROBODY_PROVIDER` | Optional | Override the agent's LLM provider. Empty uses the deployment's own default |
+
+## Judge Failures
+
+A judge that cannot run reports an outage rather than a score: `kg_qa` raises
+`JudgeUnavailable` and the case comes back as `result="error"` with the judge model
+in its trace. So a run with no API key produces errors, not plausible low scores —
+`通过: 0, 失败: 0, N 条 error` is that path, not a bad result.
 
 ## Code Style
 
-- Python 3.11+, async/await throughout
+- Python 3.11+ (`--extra mirobody` needs 3.12+), async/await throughout
 - Ruff for linting/formatting, line-length 120
 - Pydantic v2 for all data models

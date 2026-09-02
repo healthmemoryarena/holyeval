@@ -1,16 +1,17 @@
-<!-- Project Overview - HolyEval -->
+<!-- Project Overview - mirobody-eval -->
 
 ## Introduction
 
-HolyEval is a **virtual user evaluation framework** designed for AI medical assistants. It systematically evaluates AI assistant performance through automated multi-turn conversation testing and multi-dimensional assessment.
+mirobody-eval is a **virtual user evaluation framework** designed for AI medical assistants. It systematically evaluates AI assistant performance through automated multi-turn conversation testing and multi-dimensional assessment.
 
 ## Architecture Overview
 
-HolyEval adopts a modular design. Its components map onto the three core directories of the project:
+mirobody-eval adopts a modular design. Its components map onto the four workspace members:
 
 - **evaluator** — Virtual user evaluation framework + system-under-test integration
 - **generator** — Benchmark Generator + Benchmark Wrapper
 - **benchmark** — Benchmark Scheduler (batch scheduling center)
+- **web** — This management interface
 
 ### Virtual User Evaluation Framework (evaluator/)
 
@@ -36,9 +37,14 @@ Supports two execution modes for integrating different types of systems under te
 - **Real system integration**: Talks to a live system under test over its HTTP API to verify real-world performance
 - **Simulated system integration**: Directly calls LLM APIs to simulate system behavior for quick validation of evaluation logic
 
+Eight targets ship: `mirobody` — a self-hosted deployment of the engine this
+project evaluates, seeded with synthetic data and driven as a signed-in user —
+plus `llm_api` as a retrieval-only baseline and six external memory/RAG systems
+to compare against.
+
 ### Benchmark Generator (generator/)
 
-**Capabilities**: Converts external evaluation datasets into HolyEval standard format
+**Capabilities**: Converts external evaluation datasets into mirobody-eval standard format
 
 - **Data conversion**: Supports mainstream AI evaluation datasets including HealthBench, MedCalc-Bench, ESL-Bench, and more
 - **Business abstraction**: Maps raw evaluation scenarios (prompt + rubrics) to the BenchItem standard format, supporting multi-turn conversation context (`history` field)
@@ -64,7 +70,7 @@ Supports two execution modes for integrating different types of systems under te
 ## Directory Structure and Responsibilities
 
 ```
-holyeval/
+mirobody-eval/
 ├── evaluator/              # Virtual user evaluation framework + system integration
 │   ├── core/              # Core evaluation engine (orchestrator, data models)
 │   ├── plugin/            # Three-layer Agent plugin implementations
@@ -89,7 +95,7 @@ holyeval/
 
 ## Core Evaluation Capabilities
 
-HolyEval ships eight evaluators covering different evaluation scenarios:
+mirobody-eval ships eight evaluators covering different evaluation scenarios:
 
 | Evaluator | Use Case | Evaluation Method |
 |--------|---------|---------|
