@@ -458,9 +458,9 @@ async def seed_user(user_root: Path, *, require_searchable: bool = True, hold_ou
 async def _run(args: argparse.Namespace) -> None:
     _require_mirobody()
 
-    from mirobody.utils import Config
+    from evaluator.utils.mirobody_config import ensure_mirobody_config
 
-    await Config.init()
+    await ensure_mirobody_config()
 
     data_dir = DATA_DIR
     if args.all:

@@ -18,24 +18,32 @@ dependencies = [
 # user that has no login. Optional because every other target here speaks plain
 # HTTP and needs none of it.
 #
-# Both halves of this requirement were found the hard way, by installing it and
-# importing what the seeder actually calls:
+# Every part of this requirement was found by installing it and importing what
+# the seeder actually calls:
 #
-#   `[server]` — `mirobody.task.base` does a plain `from redis.asyncio import
+#   `[app]`   — `mirobody.task.base` does a plain `from redis.asyncio import
 #   Redis`, and redis (with psycopg and sqlalchemy, which `execute_query` needs)
 #   lives in that extra. Bare `mirobody` installs, and then `IndicatorSyncTask`
 #   dies on `No module named 'redis'`.
 #
-#   `>=1.2.1`  — `mirobody.task` and `mirobody.indicator.fhir` first appear in
-#   the 1.0.62 wheel (1.0.51 has neither), and the `server` extra itself first
-#   appears in 1.2.1 — 1.0.62 declares only cn/fin/test.
+#   `[parse]` — python-dotenv, which `mirobody.utils.config` imports at module
+#   scope. Without it `global_config()` — and therefore JWT signing in the
+#   target agent — dies on `No module named 'dotenv'`.
+#
+#   `>=1.3.0` — 1.3.0 renamed the extras. `pip install mirobody` is now the
+#   LIBRARY (2 packages) and the six old extras became two; `[server]` and
+#   `[agents]` are gone. An unknown extra is a warning rather than an error, so
+#   the old `mirobody[server]` pin kept resolving and silently installed the
+#   library half — the failure surfaced later as the two ModuleNotFoundErrors
+#   above. Pinning the floor to 1.3.0 keeps the extra names and the version in
+#   step, so a resolver can never pick a release where these names mean nothing.
 #
 # The marker is required rather than cosmetic: mirobody is Python>=3.12 while
 # this project supports >=3.11, so an unmarked requirement makes the whole
 # workspace unresolvable on 3.11 — including for the targets that never touch
 # mirobody. On 3.11 the extra therefore installs nothing, and
 # `generator.eslbench.seed_mirobody` says so instead of failing on an import.
-mirobody = ["mirobody[server]>=1.2.1; python_version >= '3.12'"]
+mirobody = ["mirobody[app,parse]>=1.3.0; python_version >= '3.12'"]
 
 [tool.uv]
 package = false

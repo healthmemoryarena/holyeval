@@ -123,6 +123,7 @@ change you made helped. Three commands fix both:
 uv run python -m generator.eslbench.prepare_data
 
 # 2. Load it into your deployment's Postgres, and make the indicators searchable
+export MIROBODY_CONFIG=/abs/path/to/your/mirobody/config.localdb.yaml   # which deployment
 uv run python -m generator.eslbench.seed_mirobody --users user5086@demo
 
 # 3. Score your deployment on ESL-Bench
