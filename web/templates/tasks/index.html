@@ -57,10 +57,14 @@
                         </button>
                         <div x-show="open" x-transition.opacity class="sh-select-content w-max min-w-full">
                             <template x-for="d in datasets" :key="d.name">
-                                <div @click="form.dataset = d.name; onDatasetChange(); open = false"
-                                     class="sh-select-item whitespace-nowrap" :class="form.dataset === d.name && 'selected'">
+                                <div @click="if (!d.unavailable_reason) { form.dataset = d.name; onDatasetChange(); open = false }"
+                                     class="sh-select-item whitespace-nowrap"
+                                     :class="[form.dataset === d.name && 'selected', d.unavailable_reason && 'opacity-50 cursor-not-allowed']"
+                                     :title="d.unavailable_reason || ''">
                                     <span x-text="d.name"></span>
-                                    <span class="ml-auto text-xs text-muted-foreground tabular-nums" x-text="datasetHint(d)"></span>
+                                    <span class="ml-auto text-xs tabular-nums"
+                                          :class="d.unavailable_reason ? 'text-muted-foreground/70 italic' : 'text-muted-foreground'"
+                                          x-text="d.unavailable_reason || datasetHint(d)"></span>
                                 </div>
                             </template>
                             <div x-show="datasets.length === 0" class="sh-select-item text-muted-foreground">Select a benchmark first</div>

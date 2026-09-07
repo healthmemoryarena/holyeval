@@ -116,11 +116,16 @@ def _resolve_dataset(report_path: Path) -> Path:
 
     Naming: {dataset}_{target_label}_{YYYYMMDD_HHMMSS}.json under benchmark/report/{benchmark}/
     """
+    from evaluator.utils.benchmark_reader import resolve_dataset
+
     parts = _parse_filename_tokens(report_path)
     # Conservative: take the first token as dataset (works for "full-20260430_..." / "sample_...")
     dataset = parts[0] if parts else report_path.stem
     benchmark = report_path.parent.name
-    candidate = report_path.parents[2] / "data" / benchmark / f"{dataset}.jsonl"
+    # Through the shared resolver, so re-scoring a report finds a fetched bank the
+    # same way the original run did. Resolving it here on its own meant a report
+    # produced from a fetched release could not be re-scored at all.
+    candidate, _ = resolve_dataset(benchmark, dataset)
     if not candidate.exists():
         raise FileNotFoundError(f"Cannot resolve source dataset for {report_path} (tried {candidate})")
     return candidate
