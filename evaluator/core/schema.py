@@ -798,6 +798,10 @@ class DatasetInfo(BaseModel):
     case_count: int
     file_size_kb: float
     evaluator: str = ""  # 数据集使用的评估器类型（首条 case 的 eval.evaluator）
+    # 能不能跑。发布批次里最新一期是闭卷的 —— 题目发了、答案没发，所以没有
+    # evaluator 字段、加载即失败。列出来但标明原因，比藏起来有用：它确实存在、
+    # 也确实是榜单在用的那个，只是还不能自己跑。
+    unavailable_reason: str = ""
 
 
 class BenchmarkSummary(BaseModel):

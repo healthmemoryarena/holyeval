@@ -165,6 +165,15 @@ class BenchReport(BaseModel):
 
     benchmark_name: str = Field(description="评测类型（如 healthbench）")
     dataset_name: str = Field(description="数据集名称（如 sample）")
+    dataset_provenance: dict = Field(
+        default_factory=dict,
+        description=(
+            "这份分数对应的数据集版本。`source=fetched` 时带 batch / manifest_version / "
+            "batch_checksum —— 有了它，一个分数才能指回一个确定的发布；`source=vendored` "
+            "是仓库内自带的副本，能离线跑，但无法说明对应哪一期。缺这个字段的报告是本字段"
+            "加入之前产生的。"
+        ),
+    )
     runtime_target: Optional[TargetInfo] = Field(None, description="运行时使用的被测系统配置（eval-only 模式为 None）")
     max_concurrency: int = Field(default=0, description="并发数")
     cases: List[TestResult] = Field(description="用例结果列表")
@@ -540,9 +549,19 @@ def build_bench_report(
             "avg_score": sum(r.eval.score for r in results) / tag_total if tag_total else 0.0,
         }
 
+    # 读一次数据集来源，写进报告：一个分数必须能指回它跑的是哪一期。
+    # 解析失败不该让一份跑完的报告丢掉 —— 来源缺失只是少了追溯信息。
+    try:
+        from evaluator.utils.benchmark_reader import resolve_dataset
+
+        _, provenance = resolve_dataset(benchmark_name, dataset_name)
+    except Exception:  # pragma: no cover - 来源信息是附加项，不能反过来毁掉报告
+        provenance = {}
+
     return BenchReport(
         benchmark_name=benchmark_name,
         dataset_name=dataset_name,
+        dataset_provenance=provenance,
         runtime_target=runtime_target,
         max_concurrency=max_concurrency,
         cases=test_results,
